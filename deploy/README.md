@@ -71,14 +71,22 @@ This matters: the chart's ConfigMap also carries a `ZO_FILE_FORMAT` default, and
 it is the pod's explicit `env` (from `extraEnv`) that overrides it. Reading the
 ConfigMap alone will mislead you.
 
-**`fake-webserver/`** — 10 replicas, no flags, so image defaults apply: 54
+**`fake-webserver/`** — 24 replicas, no flags, so image defaults apply: 54
 distinct `path` values, 5 regions, 3 versions, 2 methods, and a histogram with
 25 explicit buckets plus `+Inf`. That last detail is why
 `codelab_api_request_duration_seconds_bucket` has exactly 26× the series of
 `..._count`.
 
+Every pod is scraped as its own target and stamped with a `pod` label, so series
+count scales linearly with `replicas`: measured at ~45,220 bucket and ~1,739
+`_count` series per pod. **24 replicas** therefore gives ~1,085,280 bucket series
+and ~1.22M total active — the point at which the unfiltered histogram scans more
+than a million series. (The same cluster at 20 replicas measured 904,410 bucket /
+1,013,150 total active.) Change `replicas` for any other scale and re-run
+`bench/cardinality.sh` afterwards.
+
 **`otel-collector/`** — the load path, and the file worth reading before
-anything else. One `prometheus/perf-fakeserver` receiver scrapes the 10 pods
+anything else. One `prometheus/perf-fakeserver` receiver scrapes the 24 pods
 every 15s; one pipeline fans the result out to all four exporters. The chart's
 own default pipelines are removed with explicit `null`s; confirm they really
 went away:

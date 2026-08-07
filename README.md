@@ -14,7 +14,7 @@ byte-identical data and the same PromQL can be run against all of them.
                                  │  Prometheus  v3.6.0          │  7C / 14G / 500Gi
                                  ├──────────────────────────────┤
   fake-webserver  ──scrape──►    │  Mimir       (single binary) │  7C / 14G / 500Gi
-  10 pods, 15s     OTel      ──► ├──────────────────────────────┤
+  24 pods, 15s     OTel      ──► ├──────────────────────────────┤
   ~1.08M series    Collector     │  OpenObserve ZO_FILE_FORMAT= │  7C / 14G / 500Gi
                    (gateway)     │              parquet         │
                                  ├──────────────────────────────┤
@@ -46,7 +46,8 @@ Only the two OpenObserve deployments return an answer on all three windows.
 ## What you need
 
 - A Kubernetes cluster with **four dedicated nodes** for the systems under test,
-  plus ordinary capacity for the load generator and the collector.
+  plus ordinary capacity for the load generator (24 pods × 128m/64Mi = 3.07 CPU
+  and 1.5GiB of requests) and the collector (1–4 CPU, up to 6Gi).
   The published run used `c7g.2xlarge` (8 vCPU / 16GB, Graviton/arm64) on EKS.
 - A `gp3` (or equivalent) StorageClass. Each system gets a **500Gi** PVC.
 - `kubectl`, `helm`, `curl`, `python3`.
@@ -160,10 +161,10 @@ Stated plainly, because a reproduction you cannot audit is not a reproduction:
   strictly cache-free OpenObserve, set it to `false` — in **both** values files.
 - **Mimir was `grafana/mimir:latest`**, pulled in August 2026. Pin a concrete
   tag if you need the comparison stable over time.
-- **The article's ~1M active series came partly from a mid-test pod restart**
-  changing pod names. A clean run will not reproduce that exactly. What matters
-  is the cardinality you actually measure — `bench/cardinality.sh` reports it,
-  and you should quote it alongside any latencies.
+- **Cardinality is set by the replica count**, so quote the number you actually
+  measure. Each fake-webserver pod contributes ~45,220 bucket series; the 24
+  replicas here measure ~1.09M, which is what the unfiltered histogram scans.
+  `bench/cardinality.sh` reports it — publish it alongside any latencies.
 - **The collector here is stripped** of the pipelines that shipped the
   operator's own cluster telemetry to an internal OpenObserve. Those pipelines
   were filtered to exclude `perf-fakeserver` and never touched the systems under
@@ -180,7 +181,7 @@ deploy/
   mimir/               Mimir single-binary, filesystem blocks storage
   openobserve-parquet/ OpenObserve standalone, ZO_FILE_FORMAT=parquet
   openobserve-vortex/  OpenObserve standalone, ZO_FILE_FORMAT=vortex
-  fake-webserver/      The load generator, 10 replicas
+  fake-webserver/      The load generator, 24 replicas (~1.08M bucket series)
   otel-collector/      The scrape + 4-way fan-out. The heart of the setup.
 bench/
   config.sh            Endpoints, windows, step, runs — every knob

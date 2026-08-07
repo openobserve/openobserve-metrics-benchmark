@@ -65,7 +65,7 @@ exporters:
     endpoint: http://perf-prometheus-standalone.perf-prometheus.svc.cluster.local:9090/api/v1/write
     remote_write_queue:
       enabled: true
-      # Exporter default. 10 pods scraped every 15s does not need more, and four
+      # Exporter default. 24 pods scraped every 15s does not need more, and four
       # queues at 100k each is enough buffered data to trip memory_limiter.
       queue_size: 10000
       num_consumers: 10
@@ -216,7 +216,7 @@ gateway:
 # Agent (DaemonSet): pod/container resource usage for the fake-webserver pods,
 # also fanned out to all four systems.
 #
-# This is a rounding error next to the scrape above -- 10 pods every 30s against
+# This is a rounding error next to the scrape above -- 24 pods every 30s against
 # ~1M series scraped every 15s -- and it does NOT produce the codelab_api_*
 # metrics the queries run against. Set `agent.enabled: false` if you want the
 # absolute minimum footprint; it will not change the query results.

@@ -1,4 +1,4 @@
-# The load generator: 10 replicas of openobserve/fake-webserver:v2.
+# The load generator: 24 replicas of openobserve/fake-webserver:v2.
 #
 # No flags are passed, so the image defaults apply: 50 generated endpoints
 # (/api/service-1 .. /api/service-50) plus 4 fixed ones (/api/foo, /api/bar,
@@ -8,10 +8,23 @@
 # values, which is why the `_bucket` series count is exactly 26x the `_count`
 # series count.
 #
-# In the published run this produced:
-#   codelab_api_request_duration_seconds_count    41,760 series
-#   codelab_api_request_duration_seconds_bucket 1,085,760 series
+# Each pod carries its own `pod` label, so cardinality scales linearly with the
+# replica count. Measured, one pod contributes:
+#   codelab_api_request_duration_seconds_count      1,739 series
+#   codelab_api_request_duration_seconds_bucket    45,220 series  (= 1,739 x 26)
+#
+# 24 replicas is what puts the headline unfiltered histogram over a million
+# series:
+#   codelab_api_request_duration_seconds_count    ~41,736 series
+#   codelab_api_request_duration_seconds_bucket ~1,085,280 series
+#   total active series (all metrics)           ~1,215,780 series
+#
+# For calibration, the same cluster measured at 20 replicas: 34,785 _count,
+# 904,410 _bucket, 1,013,150 total active -- i.e. the histogram would have
+# scanned 904k series rather than >1M.
 # Verify your own numbers with bench/cardinality.sh before comparing latencies.
+#
+# 24 replicas cost 3.07 CPU / 1.5GiB of requests on the ordinary worker nodes.
 #
 # These pods run on the ordinary (untainted) worker nodes, NOT on the perf
 # nodes -- each system under test gets a perf node to itself. The toleration
@@ -29,7 +42,7 @@ metadata:
   labels:
     app: fake-webserver
 spec:
-  replicas: 10
+  replicas: 24
   selector:
     matchLabels:
       app: fake-webserver

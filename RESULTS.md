@@ -15,7 +15,7 @@ means the system refused the query on every attempt — a result in its own righ
 | Prometheus | `quay.io/prometheus/prometheus:v3.6.0` |
 | Mimir | `grafana/mimir:latest` (pulled 2026-08) |
 | OpenObserve | `0.92.0-rc3`, two deployments differing only in `ZO_FILE_FORMAT` |
-| Load | `openobserve/fake-webserver:v2` × 10 pods, scraped every 15s |
+| Load | `openobserve/fake-webserver:v2` × 24 pods, scraped every 15s |
 | Total ingested | 7.1 billion samples |
 | Query range | 2026-08-06 00:00–03:00 (CST), 3 runs per query |
 | Caches | all query caches disabled |
@@ -31,6 +31,10 @@ Cardinality of the two metrics under test:
 The bucket count is exactly 26× the `_count` count: the histogram has 25
 explicit buckets plus `+Inf`. `bench/cardinality.sh` checks this ratio — if
 yours is not 26, your load generator differs from the published one.
+
+Both figures are 24× what one fake-webserver pod contributes (~45,220 bucket /
+~1,739 `_count`, measured), matching the `replicas: 24` in
+`deploy/fake-webserver/deploy.yaml`.
 
 ## Ingestion: resource usage at steady state
 
