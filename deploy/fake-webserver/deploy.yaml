@@ -67,10 +67,10 @@ spec:
             - containerPort: 8080
           resources:
             requests:
-              cpu: 128m
+              cpu: 64m
               memory: "64Mi"
             limits:
-              cpu: "128m"
+              cpu: "64m"
               memory: "64Mi"
 ---
 apiVersion: v1
