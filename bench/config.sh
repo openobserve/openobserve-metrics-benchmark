@@ -6,9 +6,15 @@
 # -----------------------------------------------------------------------------
 # Endpoints
 #
-# Defaults assume `./port-forward.sh` is running in another terminal. If you
-# reach the systems some other way (ingress, LoadBalancer, running from inside
-# the cluster), point these at those URLs instead -- everything else still works.
+# Defaults assume `./port-forward.sh` is running in another terminal. That is
+# fine for cardinality.sh, but NOT for timing queries: the API-server hop puts a
+# ~1-2s floor under every request. `./run-in-cluster.sh` overrides these four
+# with in-cluster Service DNS and is what you want for any number you intend to
+# publish. (resources.sh and drop-caches.sh ignore these endpoints entirely --
+# they go through kubectl.)
+#
+# If you reach the systems some other way (ingress, LoadBalancer, a host in the
+# same VPC), point these at those URLs instead -- everything else still works.
 #
 # Note the path prefixes: Prometheus serves the API at the root, Mimir under
 # /prometheus, OpenObserve under /api/{org}/prometheus.

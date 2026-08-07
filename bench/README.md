@@ -6,10 +6,27 @@ overridden from the environment.
 ## Order of operations
 
 ```bash
-./port-forward.sh      # terminal 1, leave running
-./cardinality.sh       # terminal 2 — do this FIRST
-./run-benchmark.sh
+./run-in-cluster.sh --script cardinality.sh   # do this FIRST
+./run-in-cluster.sh                           # the benchmark
 ```
+
+Both run from a pod inside the cluster; no port-forward and no second terminal.
+`run-in-cluster.sh` is the one to use for timings. `run-benchmark.sh` is the
+driver it runs by default; call it directly only when you already reach the four
+systems without a port-forward. See [Measure from inside the
+cluster](#measure-from-inside-the-cluster) — a port-forwarded run has a ~1-2
+second floor under every number.
+
+`--script` takes any `bench/` script that talks to the four systems over HTTP,
+plus its own arguments:
+
+```bash
+./run-in-cluster.sh --script cardinality.sh paths
+```
+
+`resources.sh` and `drop-caches.sh` are not among them — they drive `kubectl`
+rather than HTTP, and the runner pod has neither the binary nor the RBAC. Run
+those from your workstation, where they never needed a port-forward either.
 
 `cardinality.sh` is not optional. If the four systems disagree on how many
 series they hold, they did not receive the same data and the latency numbers
@@ -96,10 +113,60 @@ Re-render a summary at any time:
 ```
 
 Latency is `curl`'s `%{time_total}` — full client-observed wall time, which is
-what a dashboard actually waits for. With `port-forward.sh` that includes a hop
-through the API server. It is the same hop for every system, so it does not bias
-the comparison, but it does inflate absolutes by a few ms; run from inside the
-cluster if you want the cleanest numbers.
+what a dashboard actually waits for.
+
+### Measure from inside the cluster
+
+**Do not publish numbers from a port-forwarded run.** `port-forward.sh` tunnels
+every request through the Kubernetes API server, and that hop is not a rounding
+error. Measured against the EKS deployment from a workstation, a trivial
+`query=1` — which Prometheus answers in microseconds — took **~1,070ms** round
+trip. The same request from a pod in the cluster took **~5ms**.
+
+Worse, the overhead is not a constant you can subtract. It scales with response
+size, because the tunnel is also a throughput bottleneck. The same `irate` query
+at the same `END_TIME`, both ways:
+
+| System | via port-forward | in-cluster | overhead |
+| --- | --- | --- | --- |
+| Prometheus | 3445 ms | 1287 ms | +2158 |
+| Mimir | 4181 ms | 1319 ms | +2862 |
+| OpenObserve · Parquet | 2122 ms | 158 ms | +1964 |
+| OpenObserve · Vortex | 1953 ms | 297 ms | +1656 |
+
+Port-forwarding does not merely inflate the absolutes — it compresses the
+systems together and destroys the ratios. Parquet vs Prometheus reads as 1.6×
+through the tunnel and 8.1× in the cluster, because a ~2s floor swamps a 158ms
+query while barely denting a 1287ms one. The fast system is punished hardest.
+
+So run it in the cluster:
+
+```bash
+./run-in-cluster.sh
+```
+
+That starts a small pod on a node that is *not* under test (it carries no `perf`
+toleration, so it cannot land on the four tainted benchmark nodes and steal
+their CPU), pinned to the same AZ as the four systems so the hop is intra-AZ and
+equal for all of them. It then copies `bench/` in, runs `run-benchmark.sh`
+there against ClusterIP Service DNS, and copies `results/<stamp>/` back here —
+same layout as a local run, plus a `measured_from` line in `run-metadata.txt`.
+
+It takes the same knobs as `run-benchmark.sh`, and the namespaces are
+overridable if your deployment drifted from `deploy/`:
+
+```bash
+RUNS=5 WINDOWS="1800 3600" ./run-in-cluster.sh
+O2_PARQUET_NS=perf-o21 O2_VORTEX_NS=perf-o22 ./run-in-cluster.sh
+./run-in-cluster.sh --delete     # remove the runner pod when you are done
+```
+
+The pod is left running between invocations so repeat runs skip setup.
+
+Nothing in the measurement path needs `port-forward.sh` any more. It survives
+for the one thing no in-cluster pod can do — opening a Prometheus, Mimir or
+OpenObserve UI in your browser — and for ad-hoc poking. Reaching a system that
+way is fine; *timing* one that way is not.
 
 ## Resource usage
 

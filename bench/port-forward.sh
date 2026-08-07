@@ -3,11 +3,22 @@
 # Ports match the defaults in config.sh.
 #
 #   terminal 1:  ./port-forward.sh
-#   terminal 2:  ./run-benchmark.sh
+#   terminal 2:  ./cardinality.sh   /   a browser
 #
-# Port-forward adds a hop through the API server. It is the same hop for every
-# system, so it does not bias the comparison, but it does add a few ms to every
-# number -- run from inside the cluster if you want the cleanest absolutes.
+# DO NOT TIME QUERIES THROUGH THIS. Every request is tunnelled through the
+# Kubernetes API server, which measured ~1,070ms for a trivial `query=1` that
+# Prometheus answers in microseconds -- ~5ms from inside the cluster.
+#
+# The overhead is not a constant that cancels out of a comparison: it grows with
+# response size, so it swamps a fast system and barely dents a slow one. On the
+# same irate query, OpenObserve/Parquet measured 158ms in-cluster and 2122ms
+# through here, while Prometheus went 1287ms -> 3445ms. The real 8.1x gap reads
+# as 1.6x through the tunnel.
+#
+# Use ./run-in-cluster.sh for anything you intend to publish -- including
+# `--script cardinality.sh`, which needs no port-forward either. This script is
+# now only for opening a UI in a browser and ad-hoc poking. (resources.sh and
+# drop-caches.sh never needed it: they drive kubectl, not these ports.)
 set -euo pipefail
 
 pids=()

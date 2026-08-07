@@ -105,15 +105,21 @@ Then wait. Come back after several hours and check that the four systems agree
 on how much data they hold — if they disagree, the latency comparison is void:
 
 ```bash
-bench/port-forward.sh          # terminal 1, leave running
-bench/cardinality.sh           # terminal 2
+bench/run-in-cluster.sh --script cardinality.sh
 ```
 
 When cardinality matches across all four, run the benchmark:
 
 ```bash
-bench/run-benchmark.sh
+bench/run-in-cluster.sh
 ```
+
+This runs the measurement from a pod inside the cluster and copies the results
+back. Do not time queries through `port-forward.sh`: the API-server hop puts a
+~1-2 second floor under every request, which compresses the systems together and
+destroys the ratios — it costs the fastest system the most. See
+[bench/README.md](bench/README.md#measure-from-inside-the-cluster) for the
+measured comparison.
 
 144 requests (4 queries × 3 windows × 4 systems × 3 runs). Results land in
 `results/<timestamp>/` as `raw.csv`, `summary.md` and `run-metadata.txt`.
@@ -186,12 +192,13 @@ deploy/
 bench/
   config.sh            Endpoints, windows, step, runs — every knob
   queries.sh           The four PromQL expressions
+  run-in-cluster.sh    Runs the driver from a pod — use this for timings
   run-benchmark.sh     The main driver -> results/<timestamp>/
   summarize.py         raw.csv -> the article's markdown tables
   cardinality.sh       Series counts per system (run this first)
   resources.sh         CPU / memory / disk per system
   drop-caches.sh       Force a cold query
-  port-forward.sh      Local ports for all four systems
+  port-forward.sh      Local ports — for browsing a UI, never for timing
 results/               Your runs land here
 RESULTS.md             The published numbers, for comparison
 ```
