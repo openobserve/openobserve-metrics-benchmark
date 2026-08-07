@@ -1,0 +1,3 @@
+# Benchmark output. Commit a run deliberately with `git add -f` if you want to
+# publish it; day-to-day runs stay local.
+results/*/

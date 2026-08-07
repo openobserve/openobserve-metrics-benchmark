@@ -1,0 +1,183 @@
+# Grafana Mimir, single-binary ("monolithic") mode on a local PVC.
+#
+# Based on Mimir's own demo config, with the ingestion limits raised so the
+# write path is never throttled by defaults. Query-side limits are left at
+# their defaults on purpose -- the unfiltered histogram hitting
+# err-mimir-max-chunks-per-query is a result, not a misconfiguration.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: perf-mimir
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/instance: mimir
+    app.kubernetes.io/name: mimir-standalone
+  name: mimir-standalone-config
+  namespace: perf-mimir
+data:
+  demo.yaml: |
+    # Do not use this configuration in production.
+    # It is for benchmark purposes only.
+    multitenancy_enabled: false
+
+    activity_tracker:
+      filepath: /mimir/activity.log
+
+    blocks_storage:
+      backend: filesystem
+      bucket_store:
+        sync_dir: /mimir/tsdb-sync
+      filesystem:
+        dir: /mimir/data/tsdb
+      tsdb:
+        dir: /mimir/tsdb
+
+    compactor:
+      data_dir: /mimir/compactor
+      sharding_ring:
+        kvstore:
+          store: memberlist
+
+    distributor:
+      ring:
+        instance_addr: 127.0.0.1
+        kvstore:
+          store: memberlist
+      ha_tracker:
+        enable_ha_tracker: true
+        kvstore:
+          store: memberlist
+
+    ingester:
+      ring:
+        instance_addr: 127.0.0.1
+        kvstore:
+          store: memberlist
+        replication_factor: 1
+
+    ruler:
+      rule_path: /mimir/data-ruler/
+
+    ruler_storage:
+      backend: filesystem
+      filesystem:
+        dir: /mimir/rules
+
+    server:
+      http_listen_port: 9009
+      log_level: error
+
+    store_gateway:
+      sharding_ring:
+        replication_factor: 1
+
+    # Write-path limits raised well above what the load generator produces, so
+    # nothing is dropped or throttled during ingestion.
+    limits:
+      ingestion_rate: 20000000
+      ingestion_burst_size: 20000000
+      max_global_series_per_user: 150000000
+      ha_cluster_label: prometheus
+      ha_replica_label: prometheus_replica
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app.kubernetes.io/instance: mimir
+    app.kubernetes.io/name: mimir-standalone
+  name: mimir-standalone
+  namespace: perf-mimir
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: mimir
+      app.kubernetes.io/name: mimir-standalone
+  serviceName: mimir-standalone
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: mimir
+        app.kubernetes.io/name: mimir-standalone
+    spec:
+      tolerations:
+      - key: perf
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+      containers:
+      - name: mimir-standalone
+        # The published run used grafana/mimir:latest, pulled 2026-08. Pin a
+        # concrete tag if you need the comparison to stay stable over time.
+        image: grafana/mimir:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 9009
+          name: http
+          protocol: TCP
+        # Same 7C/14G Guaranteed-QoS envelope as every other system under test.
+        # 14G is DECIMAL (13351Mi); do not "correct" it to 14Gi -- the pod would
+        # not fit on the node and would sit Pending forever.
+        resources:
+          limits:
+            cpu: 7000m
+            memory: 14G
+          requests:
+            cpu: 7000m
+            memory: 14G
+        securityContext: {}
+        command: ['mimir', '--config.file', '/etc/mimir/demo.yaml']
+        volumeMounts:
+        - mountPath: /mimir
+          name: data
+        - name: mimir-config
+          mountPath: /etc/mimir
+      volumes:
+      - name: mimir-config
+        configMap:
+          name: mimir-standalone-config
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      securityContext:
+        fsGroup: 2000
+        runAsGroup: 3000
+        runAsNonRoot: true
+        runAsUser: 10000
+  updateStrategy:
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 500Gi
+      volumeMode: Filesystem
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: perf-mimir-standalone
+  namespace: perf-mimir
+  labels:
+    app.kubernetes.io/instance: mimir
+    app.kubernetes.io/name: mimir-standalone
+spec:
+  selector:
+    app.kubernetes.io/instance: mimir
+    app.kubernetes.io/name: mimir-standalone
+  ports:
+    - name: http
+      port: 9009
+      targetPort: 9009
+  type: ClusterIP

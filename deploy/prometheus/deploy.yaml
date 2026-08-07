@@ -1,0 +1,143 @@
+# Standalone Prometheus, in "receive and query only" mode.
+#
+# It scrapes nothing itself (scrape_configs is empty). All load arrives via
+# remote write from the OTel Collector gateway, so Prometheus, Mimir and both
+# OpenObserve deployments receive byte-identical input.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: perf-prometheus
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/instance: prometheus
+    app.kubernetes.io/name: prometheus-standalone
+  name: prometheus-standalone-config
+  namespace: perf-prometheus
+data:
+  prometheus.yml: |
+    # Perf-test mode: ingest via remote write + serve queries only.
+    # fake-webserver metrics are scraped by the OTel Collector gateway
+    # (receiver prometheus/perf-fakeserver) and forwarded here.
+    global:
+      scrape_interval: 15s
+      scrape_timeout: 10s
+
+    scrape_configs: []
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app.kubernetes.io/instance: prometheus
+    app.kubernetes.io/name: prometheus-standalone
+  name: prometheus-standalone
+  namespace: perf-prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: prometheus
+      app.kubernetes.io/name: prometheus-standalone
+  serviceName: prometheus-standalone
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: prometheus
+        app.kubernetes.io/name: prometheus-standalone
+    spec:
+      tolerations:
+      - key: perf
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+      containers:
+      - name: prometheus-standalone
+        image: quay.io/prometheus/prometheus:v3.6.0
+        imagePullPolicy: IfNotPresent
+        args:
+          # --web.enable-remote-write-receiver is what makes /api/v1/write work.
+          - --config.file=/etc/prometheus/prometheus.yml
+          - --storage.tsdb.path=/prometheus
+          - --web.enable-lifecycle
+          - --web.enable-remote-write-receiver
+        ports:
+        - containerPort: 9090
+          name: http
+          protocol: TCP
+        # One system per c7g.2xlarge perf node. Allocatable is 7910m / 14680Mi and
+        # the daemonsets take 148m / 909Mi, leaving 7762m / 13771Mi -- so 7C/14G
+        # sits close to the ceiling, with 762m CPU and 420Mi memory to spare.
+        # requests == limits puts the pod in Guaranteed QoS so memory is never
+        # reclaimed and CPU shares are fixed -- identical across all four systems
+        # under test.
+        #
+        # 14G is DECIMAL: 14e9 bytes = 13351Mi. Do NOT "correct" it to 14Gi --
+        # that is 14336Mi, 565Mi more than the node has left, and the pod would
+        # sit Pending forever.
+        resources:
+          limits:
+            cpu: 7000m
+            memory: 14G
+          requests:
+            cpu: 7000m
+            memory: 14G
+        securityContext: {}
+        volumeMounts:
+        - mountPath: /prometheus
+          name: data
+        - name: prometheus-config
+          mountPath: /etc/prometheus
+      volumes:
+      - name: prometheus-config
+        configMap:
+          name: prometheus-standalone-config
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      securityContext:
+        fsGroup: 2000
+        runAsGroup: 3000
+        runAsNonRoot: true
+        runAsUser: 1000
+  updateStrategy:
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      # 500Gi of gp3 on every system under test. See deploy/README.md for the
+      # StorageClass -- the default gp3 profile (3000 IOPS / 125 MB/s) is what
+      # produces the ~30s cold-query numbers discussed in the article.
+      #
+      # NOTE: volumeClaimTemplates is immutable. Changing this needs the
+      # StatefulSet and the PVC deleted and re-applied, not just kubectl apply.
+      resources:
+        requests:
+          storage: 500Gi
+      volumeMode: Filesystem
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: perf-prometheus-standalone
+  namespace: perf-prometheus
+  labels:
+    app.kubernetes.io/instance: prometheus
+    app.kubernetes.io/name: prometheus-standalone
+spec:
+  selector:
+    app.kubernetes.io/instance: prometheus
+    app.kubernetes.io/name: prometheus-standalone
+  ports:
+    - name: http
+      port: 9090
+      targetPort: 9090
+  type: ClusterIP

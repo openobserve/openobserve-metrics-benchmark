@@ -1,0 +1,77 @@
+# The load generator: 10 replicas of openobserve/fake-webserver:v2.
+#
+# No flags are passed, so the image defaults apply: 50 generated endpoints
+# (/api/service-1 .. /api/service-50) plus 4 fixed ones (/api/foo, /api/bar,
+# /api/baz, /api/boom), 5 regions, 3 versions, 2 methods (GET/POST) and a
+# handful of status codes. The duration histogram uses
+# ExponentialBuckets(0.0001, 1.5, 25), i.e. 25 buckets + `+Inf` = 26 `le`
+# values, which is why the `_bucket` series count is exactly 26x the `_count`
+# series count.
+#
+# In the published run this produced:
+#   codelab_api_request_duration_seconds_count    41,760 series
+#   codelab_api_request_duration_seconds_bucket 1,085,760 series
+# Verify your own numbers with bench/cardinality.sh before comparing latencies.
+#
+# These pods run on the ordinary (untainted) worker nodes, NOT on the perf
+# nodes -- each system under test gets a perf node to itself. The toleration
+# below is a leftover safety net; the pods are small (128m / 64Mi) either way.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: perf-fakeserver
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fake-webserver
+  namespace: perf-fakeserver
+  labels:
+    app: fake-webserver
+spec:
+  replicas: 10
+  selector:
+    matchLabels:
+      app: fake-webserver
+  template:
+    metadata:
+      labels:
+        app: fake-webserver
+    spec:
+      # The published run used Graviton (c7g) nodes throughout. Drop this
+      # nodeSelector if your cluster is amd64 -- the image is multi-arch.
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      tolerations:
+      - key: perf
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+      containers:
+        - name: fake-webserver
+          image: openobserve/fake-webserver:v2
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 128m
+              memory: "64Mi"
+            limits:
+              cpu: "128m"
+              memory: "64Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fake-webserver
+  namespace: perf-fakeserver
+  labels:
+    app: fake-webserver
+spec:
+  selector:
+    app: fake-webserver
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+  type: ClusterIP

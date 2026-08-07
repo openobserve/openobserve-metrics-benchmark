@@ -1,0 +1,322 @@
+# =============================================================================
+# The load path. This is the single most important file in the benchmark.
+#
+# ONE OTel Collector scrapes the fake-webserver pods and fans the result out,
+# unchanged, to all four systems under test. Every system therefore receives
+# byte-identical input -- same samples, same timestamps, same label sets.
+#
+# All four exporters use `prometheusremotewrite` with identical queue and retry
+# settings. Mixing OTLP for OpenObserve with remote write for the others would
+# put a different protocol and parsing cost on each side and pollute the
+# comparison, so it is deliberately not done.
+#
+# This file is derived from the collector that produced the published numbers,
+# stripped of the exporters and pipelines that shipped the operator's own
+# cluster telemetry to their internal OpenObserve. Those pipelines never touched
+# the systems under test (a `filter/drop_perf_fakeserver` processor kept
+# perf-fakeserver out of them, and a `filter/only_perf_fakeserver` kept
+# everything else out of the perf path), so removing them does not change the
+# measured workload.
+# =============================================================================
+
+k8sCluster: "metrics-benchmark"
+
+image:
+  repository: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib
+  pullPolicy: IfNotPresent
+  # Pinned. Must match what is actually deployed
+  # (`helm -n openobserve-collector get values o2c`), otherwise an unrelated
+  # `./install.sh` silently rolls the collector to a different build.
+  tag: "0.138.0"
+
+# This chart renders OpenTelemetryCollector CRs, so the OpenTelemetry Operator
+# must already exist in the cluster. install.sh installs it (plus cert-manager,
+# which the operator's release manifest requires). The operator is NOT a
+# subchart of this chart -- setting `opentelemetry-operator.enabled` here does
+# nothing.
+
+# Not part of the benchmark; it only adds series to pipelines we removed.
+kube-state-metrics:
+  enabled: false
+
+autoinstrumentation:
+  enabled: false
+
+exporters:
+  # The chart's defaults ship cluster telemetry to api.openobserve.ai with
+  # placeholder credentials. Nothing references them once the default pipelines
+  # are removed below, but null them out so `helm get values` stays honest.
+  otlphttp/openobserve: null
+  otlphttp/openobserve_k8s_events: null
+
+  # ---------------------------------------------------------------------------
+  # The four systems under test.
+  #
+  # OpenObserve exposes remote write at /api/{org}/prometheus/api/v1/write and
+  # needs config.ZO_PROMETHEUS_ENABLED=true (set in both values.yaml).
+  # The A/B between the two OpenObserve entries is ZO_FILE_FORMAT only:
+  # parquet on perf-o2-parquet, vortex on perf-o2-vortex.
+  #
+  # The Authorization header is base64("root@example.com:Complexpass#123"),
+  # matching `auth:` in the two OpenObserve values.yaml files. Change it in all
+  # three places together.
+  # ---------------------------------------------------------------------------
+  prometheusremotewrite/perf-prometheus:
+    endpoint: http://perf-prometheus-standalone.perf-prometheus.svc.cluster.local:9090/api/v1/write
+    remote_write_queue:
+      enabled: true
+      # Exporter default. 10 pods scraped every 15s does not need more, and four
+      # queues at 100k each is enough buffered data to trip memory_limiter.
+      queue_size: 10000
+      num_consumers: 10
+    retry_on_failure:
+      enabled: true
+  prometheusremotewrite/perf-mimir:
+    endpoint: http://perf-mimir-standalone.perf-mimir.svc.cluster.local:9009/api/v1/push
+    remote_write_queue:
+      enabled: true
+      queue_size: 10000
+      num_consumers: 10
+    retry_on_failure:
+      enabled: true
+  prometheusremotewrite/perf-o2-parquet:
+    endpoint: http://o2-openobserve-standalone.perf-o2-parquet.svc.cluster.local:5080/api/default/prometheus/api/v1/write
+    headers:
+      Authorization: Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=
+    remote_write_queue:
+      enabled: true
+      queue_size: 10000
+      num_consumers: 10
+    retry_on_failure:
+      enabled: true
+  prometheusremotewrite/perf-o2-vortex:
+    endpoint: http://o2-openobserve-standalone.perf-o2-vortex.svc.cluster.local:5080/api/default/prometheus/api/v1/write
+    headers:
+      Authorization: Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=
+    remote_write_queue:
+      enabled: true
+      queue_size: 10000
+      num_consumers: 10
+    retry_on_failure:
+      enabled: true
+
+# =============================================================================
+# Gateway: the main load path.
+# =============================================================================
+gateway:
+  enabled: true
+  replicas: 1
+  telemetry:
+    metrics:
+      level: none
+  targetAllocator:
+    enabled: false
+  affinity: {}
+  nodeSelector: {}
+  tolerations:
+    - operator: Exists
+  # memory_limiter below starts refusing at ~3.3GiB, comfortably under this 6Gi
+  # container limit, so the process sheds load rather than being OOMKilled.
+  resources:
+    limits:
+      cpu: 4
+      memory: 6Gi
+    requests:
+      cpu: 1
+      memory: 2Gi
+  autoscaling:
+    enabled: false
+
+  receivers:
+    # Scrape the fake-webserver pods directly. Service discovery is scoped to the
+    # perf-fakeserver namespace, so this receiver can never pick up anything else.
+    prometheus/perf-fakeserver:
+      config:
+        scrape_configs:
+          - job_name: fake-webserver
+            scrape_interval: 15s
+            scrape_timeout: 10s
+            metrics_path: /metrics
+            kubernetes_sd_configs:
+              - role: pod
+                namespaces:
+                  names:
+                    - perf-fakeserver
+            relabel_configs:
+              - action: drop
+                source_labels:
+                  - __meta_kubernetes_pod_container_init
+                regex: "true"
+              - action: keep
+                source_labels:
+                  - __meta_kubernetes_pod_phase
+                regex: Running
+              # role: pod emits one target per declared containerPort; keep the metrics port.
+              - action: keep
+                source_labels:
+                  - __meta_kubernetes_pod_container_port_number
+                regex: "8080"
+              - action: labelmap
+                regex: __meta_kubernetes_pod_label_(.+)
+              - action: replace
+                source_labels:
+                  - __meta_kubernetes_namespace
+                target_label: namespace
+              - action: replace
+                source_labels:
+                  - __meta_kubernetes_pod_name
+                target_label: pod
+              - action: replace
+                source_labels:
+                  - __meta_kubernetes_pod_node_name
+                target_label: node
+
+  processors:
+    memory_limiter:
+      check_interval: 1s
+      limit_mib: 4096
+      spike_limit_mib: 768
+    batch:
+      send_batch_size: 2000
+      send_batch_max_size: 5000
+      timeout: 5s
+
+  connectors: {}
+
+  extensions:
+    health_check:
+      endpoint: 0.0.0.0:13133
+    zpages: {}
+
+  service:
+    extensions: [health_check, zpages]
+    pipelines:
+      # The chart ships default pipelines that ship cluster telemetry to an
+      # OpenObserve endpoint. `null` removes them -- verify with
+      #   helm template ... | grep -A 40 'pipelines:'
+      logs/k8s_events: null
+      metrics: null
+      traces: null
+
+      # One scrape, fanned out unchanged to all four systems under test, so they
+      # each ingest exactly the same series.
+      # No k8sattributes -- the relabel_configs above already stamp
+      # namespace/pod/node, and prometheusremotewrite would drop resource
+      # attributes anyway.
+      metrics/perf_fakeserver:
+        receivers: [prometheus/perf-fakeserver]
+        processors: [memory_limiter, attributes, batch]
+        exporters:
+          - prometheusremotewrite/perf-prometheus
+          - prometheusremotewrite/perf-mimir
+          - prometheusremotewrite/perf-o2-parquet
+          - prometheusremotewrite/perf-o2-vortex
+
+# =============================================================================
+# Agent (DaemonSet): pod/container resource usage for the fake-webserver pods,
+# also fanned out to all four systems.
+#
+# This is a rounding error next to the scrape above -- 10 pods every 30s against
+# ~1M series scraped every 15s -- and it does NOT produce the codelab_api_*
+# metrics the queries run against. Set `agent.enabled: false` if you want the
+# absolute minimum footprint; it will not change the query results.
+# =============================================================================
+agent:
+  enabled: true
+  tolerations:
+    - operator: Exists
+  resources: {}
+
+  receivers:
+    kubeletstats:
+      collection_interval: 30s
+      auth_type: "serviceAccount"
+      endpoint: "https://${env:K8S_NODE_NAME}:10250"
+      insecure_skip_verify: true
+      extra_metadata_labels:
+        - container.id
+        - k8s.volume.type
+      metric_groups:
+        - node
+        - pod
+        - container
+        - volume
+      metrics:
+        k8s.pod.cpu.usage:
+          enabled: true
+        k8s.node.cpu.usage:
+          enabled: true
+        container.cpu.usage:
+          enabled: true
+        k8s.pod.cpu_limit_utilization:
+          enabled: true
+        k8s.pod.cpu_request_utilization:
+          enabled: true
+        k8s.pod.memory_limit_utilization:
+          enabled: true
+        k8s.pod.memory_request_utilization:
+          enabled: true
+
+  processors:
+    memory_limiter:
+      check_interval: 1s
+      limit_mib: 512
+      spike_limit_mib: 128
+    resourcedetection:
+      detectors: [system, env, k8snode]
+      override: true
+      system:
+        hostname_sources: [os, dns]
+    # Only perf-fakeserver survives. Node-level metrics have no
+    # k8s.namespace.name, so they are dropped here too.
+    filter/only_perf_fakeserver:
+      error_mode: ignore
+      metrics:
+        metric:
+          - 'resource.attributes["k8s.namespace.name"] != "perf-fakeserver"'
+    # prometheusremotewrite only turns datapoint attributes into labels, so
+    # promote the k8s resource attributes we care about. Names match the
+    # gateway scrape job.
+    transform/perf_fakeserver_labels:
+      error_mode: ignore
+      metric_statements:
+        - context: datapoint
+          statements:
+            - set(attributes["namespace"], resource.attributes["k8s.namespace.name"])
+            - set(attributes["pod"], resource.attributes["k8s.pod.name"])
+            - set(attributes["node"], resource.attributes["k8s.node.name"])
+            - set(attributes["container"], resource.attributes["k8s.container.name"])
+    batch:
+      send_batch_size: 2000
+      send_batch_max_size: 5000
+      timeout: 5s
+
+  connectors: {}
+
+  extensions:
+    health_check:
+      endpoint: 0.0.0.0:13133
+    zpages: {}
+
+  service:
+    extensions: [health_check, zpages]
+    pipelines:
+      # Remove the chart's default log/metric shipping.
+      logs: null
+      metrics: null
+
+      metrics/perf_fakeserver:
+        receivers: [kubeletstats]
+        processors:
+          - memory_limiter
+          - resourcedetection
+          - attributes
+          - k8sattributes
+          - filter/only_perf_fakeserver
+          - transform/perf_fakeserver_labels
+          - batch
+        exporters:
+          - prometheusremotewrite/perf-prometheus
+          - prometheusremotewrite/perf-mimir
+          - prometheusremotewrite/perf-o2-parquet
+          - prometheusremotewrite/perf-o2-vortex

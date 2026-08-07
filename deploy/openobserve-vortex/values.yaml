@@ -1,0 +1,219 @@
+# OpenObserve single-node, storing files in VORTEX.
+#
+# This file and deploy/openobserve-vortex/values.yaml differ in exactly one
+# meaningful line: ZO_FILE_FORMAT. Diff them before every run --
+#   diff deploy/openobserve-parquet/values.yaml deploy/openobserve-vortex/values.yaml
+# should show only ZO_FILE_FORMAT (parquet vs vortex) and the comments naming it.
+
+image:
+  oss:
+    repository: openobserve/openobserve
+    # The published run used v0.92.0-rc3. The tag is a multi-arch manifest, so
+    # it works on both Graviton (arm64) and x86 nodes.
+    tag: "v0.92.0-rc3"
+  enterprise:
+    repository: openobserve/openobserve-enterprise
+    tag: "unset"
+  busybox:
+    repository: public.ecr.aws/docker/library/busybox
+    tag: 1.36.1
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+clusterDomain: "cluster.local"
+
+serviceAccount:
+  create: true
+  # No IRSA / cloud role: storage is the local PVC, nothing talks to S3.
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+labels: {}
+
+podSecurityContext:
+  fsGroup: 0
+  runAsUser: 0
+  runAsGroup: 0
+  runAsNonRoot: false
+
+securityContext: {}
+
+cache:
+  enabled: false
+
+persistence:
+  enabled: true
+  # This is the primary data store, not just a cache: WAL + data files + the
+  # sqlite meta store all live here. 500Gi matches Prometheus and Mimir so the
+  # comparison is like for like.
+  size: 500Gi
+  # Leave empty to use the cluster default StorageClass. See deploy/README.md --
+  # the published run used gp3 at its default 3000 IOPS / 125 MB/s profile, which
+  # is what produces the ~30s cold-query behaviour described in the article.
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  annotations: {}
+  volumePermissions:
+    enabled: false
+
+extraVolumeMounts: []
+extraVolumes: []
+
+headless:
+  enabled: true
+  service:
+    annotations: {}
+
+# Demo credentials. base64("root@example.com:Complexpass#123") is the
+# Authorization header used by the collector's remote-write exporters and by
+# bench/config.sh. Change it in all three places together.
+auth:
+  ZO_ROOT_USER_EMAIL: "root@example.com"
+  ZO_ROOT_USER_PASSWORD: "Complexpass#123"
+  ZO_ROOT_USER_TOKEN: ""
+
+  # Unused: storage is the local PVC, not S3.
+  ZO_S3_ACCESS_KEY: ""
+  ZO_S3_SECRET_KEY: ""
+
+  AZURE_STORAGE_ACCOUNT_KEY: ""
+  AZURE_STORAGE_ACCOUNT_NAME: ""
+
+  # Standalone uses sqlite; no external postgres.
+  ZO_META_POSTGRES_DSN: ""
+
+  existingRootUserSecret:
+    name: ""
+    emailKey: "ZO_ROOT_USER_EMAIL"
+    passwordKey: "ZO_ROOT_USER_PASSWORD"
+
+# https://openobserve.ai/docs/environment-variables/
+config:
+  ZO_APP_NAME: "openobserve"
+  ZO_CLUSTER_NAME: "o2"
+  ZO_INSTANCE_NAME: ""
+  ZO_NODE_ROLE: "all"
+  # Single node on local disk. Both are required for that: ZO_LOCAL_MODE_STORAGE
+  # only takes effect while ZO_LOCAL_MODE is true.
+  ZO_LOCAL_MODE: "true"
+  ZO_LOCAL_MODE_STORAGE: "disk"
+  ZO_DATA_DIR: "./data/"
+  ZO_UI_ENABLED: "true"
+  # Set this to the externally reachable URL if you expose the UI through an
+  # ingress/gateway; OpenObserve builds redirects and share links from it. Empty
+  # is fine when you reach the UI via `kubectl port-forward`.
+  ZO_WEB_URL: ""
+  ZO_BASE_URI: ""
+  # Standalone: sqlite on the PVC replaces the postgres + nats control plane.
+  ZO_META_STORE: "sqlite"
+  ZO_METRICS_DEDUP_ENABLED: "true"
+  # Must match Mimir's ha_cluster_label / ha_replica_label so both systems
+  # deduplicate the incoming remote-write stream the same way.
+  ZO_PROMETHEUS_HA_CLUSTER: "prometheus"
+  ZO_PROMETHEUS_HA_REPLICA: "prometheus_replica"
+  # Enables /api/{org}/prometheus/api/v1/{write,query,query_range}.
+  ZO_PROMETHEUS_ENABLED: "true"
+  RUST_LOG: "info,config::axum=warn,tantivy=warn"
+  RUST_BACKTRACE: "0"
+
+extraEnv:
+  # The unfiltered histogram touches ~1.08M series; the defaults would reject it
+  # before the engine ever ran, which would make the comparison meaningless.
+  - name: ZO_METRICS_MAX_SERIES_RESPONSE
+    value: "40000"
+  - name: ZO_METRICS_MAX_POINTS_PER_SERIES
+    value: "10000000"
+  # ON by default. Turned OFF here because in these metrics tests it made
+  # queries ~20% SLOWER. It only affects parquet -- vortex always pushes filters
+  # down -- but it is set identically in both values files so the two
+  # deployments stay a clean A/B.
+  - name: ZO_FEATURE_PUSHDOWN_FILTER_ENABLED
+    value: "false"
+  # Fairness: no query result caching, matching "caches disabled" on the others.
+  - name: ZO_RESULT_CACHE_ENABLED
+    value: "false"
+  # >>> THE A/B VARIABLE <<<  vortex here, parquet in ../openobserve-parquet.
+  - name: ZO_FILE_FORMAT
+    value: "vortex"
+
+serviceMonitor:
+  enabled: false
+
+service:
+  type: ClusterIP
+  http_port: 5080
+  grpc_port: 5081
+  annotations: {}
+
+certIssuer:
+  enabled: false
+
+secret:
+  annotations: {}
+
+blockedMetrics:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 50m
+      memory: 128Mi
+
+# Reach the UI/API with `bench/port-forward.sh` instead. Exposing it depends on
+# what your cluster runs (nginx ingress, Gateway API, a LoadBalancer Service),
+# and none of that affects the measurements.
+ingress:
+  enabled: false
+
+gateway:
+  enabled: false
+
+# One system per c7g.2xlarge perf node. Allocatable is 7910m / 14680Mi and the
+# daemonsets take 148m / 909Mi, leaving 7762m / 13771Mi -- so 7C/14G sits close
+# to the ceiling, with 762m CPU and 420Mi memory to spare. requests == limits
+# puts the pod in Guaranteed QoS so memory is never reclaimed and CPU shares are
+# fixed -- identical across all four systems under test.
+#
+# 14G is DECIMAL: 14e9 bytes = 13351Mi. Do NOT "correct" it to 14Gi -- that is
+# 14336Mi, 565Mi more than the node has left, and the pod would sit Pending
+# forever.
+resources:
+  limits:
+    cpu: 7
+    memory: 14G
+  requests:
+    cpu: 7
+    memory: 14G
+
+nodeSelector: {}
+
+# Same taint as prometheus / mimir so all four systems share the perf node pool
+# and each lands on a node of its own.
+tolerations:
+  - key: perf
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+
+affinity: {}
+
+minio:
+  enabled: false
+
+probes:
+  enabled: true
+  initialDelaySeconds: 10
+  failureThreshold: 3
+  path: /healthz
+
+enterprise:
+  enabled: false
+
+aiGateway:
+  enabled: false
