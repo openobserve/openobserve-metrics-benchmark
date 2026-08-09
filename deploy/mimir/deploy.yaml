@@ -1,9 +1,8 @@
 # Grafana Mimir, single-binary ("monolithic") mode on a local PVC.
 #
-# Based on Mimir's own demo config, with the ingestion limits raised so the
-# write path is never throttled by defaults. Query-side limits are left at
-# their defaults on purpose -- the unfiltered histogram hitting
-# err-mimir-max-chunks-per-query is a result, not a misconfiguration.
+# Based on Mimir's own demo config, with ingestion and query limits raised.
+# Mimir needs BOTH querier.timeout and server.http_server_write_timeout to
+# honour a 600s query. See deploy/README.md#query-limits.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -66,9 +65,13 @@ data:
       filesystem:
         dir: /mimir/rules
 
+    querier:
+      timeout: 600s
+
     server:
       http_listen_port: 9009
       log_level: error
+      http_server_write_timeout: 600s
 
     store_gateway:
       sharding_ring:
@@ -80,6 +83,7 @@ data:
       ingestion_rate: 20000000
       ingestion_burst_size: 20000000
       max_global_series_per_user: 150000000
+      max_fetched_chunks_per_query: 20000000
       ha_cluster_label: prometheus
       ha_replica_label: prometheus_replica
 ---
@@ -119,16 +123,14 @@ spec:
         - containerPort: 9009
           name: http
           protocol: TCP
-        # Same 7C/14G Guaranteed-QoS envelope as every other system under test.
-        # 14G is DECIMAL (13351Mi); do not "correct" it to 14Gi -- the pod would
-        # not fit on the node and would sit Pending forever.
+        # 7C/28G, identical on all four systems. See deploy/README.md#sizing.
         resources:
           limits:
             cpu: 7000m
-            memory: 14G
+            memory: 28G
           requests:
             cpu: 7000m
-            memory: 14G
+            memory: 28G
         securityContext: {}
         command: ['mimir', '--config.file', '/etc/mimir/demo.yaml']
         volumeMounts:

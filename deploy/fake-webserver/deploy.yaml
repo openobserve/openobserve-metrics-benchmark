@@ -1,34 +1,11 @@
-# The load generator: 24 replicas of openobserve/fake-webserver:v2.
+# The load generator: 24 replicas of openobserve/fake-webserver:v2, no flags.
 #
-# No flags are passed, so the image defaults apply: 50 generated endpoints
-# (/api/service-1 .. /api/service-50) plus 4 fixed ones (/api/foo, /api/bar,
-# /api/baz, /api/boom), 5 regions, 3 versions, 2 methods (GET/POST) and a
-# handful of status codes. The duration histogram uses
-# ExponentialBuckets(0.0001, 1.5, 25), i.e. 25 buckets + `+Inf` = 26 `le`
-# values, which is why the `_bucket` series count is exactly 26x the `_count`
-# series count.
+# Cardinality scales linearly with `replicas` (~45,220 bucket series per pod);
+# 24 is what puts the unfiltered histogram over a million series. The histogram
+# has 25 buckets + `+Inf`, so `_bucket` is exactly 26x `_count`.
+# See deploy/README.md. Re-run bench/cardinality.sh after changing replicas.
 #
-# Each pod carries its own `pod` label, so cardinality scales linearly with the
-# replica count. Measured, one pod contributes:
-#   codelab_api_request_duration_seconds_count      1,739 series
-#   codelab_api_request_duration_seconds_bucket    45,220 series  (= 1,739 x 26)
-#
-# 24 replicas is what puts the headline unfiltered histogram over a million
-# series:
-#   codelab_api_request_duration_seconds_count    ~41,736 series
-#   codelab_api_request_duration_seconds_bucket ~1,085,280 series
-#   total active series (all metrics)           ~1,215,780 series
-#
-# For calibration, the same cluster measured at 20 replicas: 34,785 _count,
-# 904,410 _bucket, 1,013,150 total active -- i.e. the histogram would have
-# scanned 904k series rather than >1M.
-# Verify your own numbers with bench/cardinality.sh before comparing latencies.
-#
-# 24 replicas cost 3.07 CPU / 1.5GiB of requests on the ordinary worker nodes.
-#
-# These pods run on the ordinary (untainted) worker nodes, NOT on the perf
-# nodes -- each system under test gets a perf node to itself. The toleration
-# below is a leftover safety net; the pods are small (128m / 64Mi) either way.
+# Runs on ordinary worker nodes, not the perf nodes.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -51,8 +28,7 @@ spec:
       labels:
         app: fake-webserver
     spec:
-      # The published run used Graviton (c7g) nodes throughout. Drop this
-      # nodeSelector if your cluster is amd64 -- the image is multi-arch.
+      # Drop this if your cluster is amd64 -- the image is multi-arch.
       nodeSelector:
         kubernetes.io/arch: arm64
       tolerations:

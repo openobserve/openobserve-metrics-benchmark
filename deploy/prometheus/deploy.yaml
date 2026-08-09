@@ -63,27 +63,20 @@ spec:
           - --storage.tsdb.path=/prometheus
           - --web.enable-lifecycle
           - --web.enable-remote-write-receiver
+          - --query.max-samples=1000000000
+          - --query.timeout=600s
         ports:
         - containerPort: 9090
           name: http
           protocol: TCP
-        # One system per c7g.2xlarge perf node. Allocatable is 7910m / 14680Mi and
-        # the daemonsets take 148m / 909Mi, leaving 7762m / 13771Mi -- so 7C/14G
-        # sits close to the ceiling, with 762m CPU and 420Mi memory to spare.
-        # requests == limits puts the pod in Guaranteed QoS so memory is never
-        # reclaimed and CPU shares are fixed -- identical across all four systems
-        # under test.
-        #
-        # 14G is DECIMAL: 14e9 bytes = 13351Mi. Do NOT "correct" it to 14Gi --
-        # that is 14336Mi, 565Mi more than the node has left, and the pod would
-        # sit Pending forever.
+        # 7C/28G, identical on all four systems. See deploy/README.md#sizing.
         resources:
           limits:
             cpu: 7000m
-            memory: 14G
+            memory: 28G
           requests:
             cpu: 7000m
-            memory: 14G
+            memory: 28G
         securityContext: {}
         volumeMounts:
         - mountPath: /prometheus

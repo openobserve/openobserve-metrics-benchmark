@@ -26,13 +26,19 @@ because its exporters point at the other four Services.
 The three path prefixes are why `bench/config.sh` stores a *base URL* per system
 rather than a hostname.
 
-All four get the same envelope: **7 CPU / 14G with requests == limits**
-(Guaranteed QoS, so CPU shares are fixed and memory is never reclaimed) on a
-**dedicated node**, and a **500Gi** PVC.
+## Sizing
 
-> `memory: 14G` is decimal — 14e9 bytes = 13351Mi. Do **not** "correct" it to
-> `14Gi`; that is 14336Mi, more than a `c7g.2xlarge` has left after daemonsets,
-> and the pod will sit `Pending` forever.
+**7 CPU / 28G, requests == limits** (Guaranteed QoS) on a dedicated
+`m7g.2xlarge` tainted `perf=true:NoSchedule`, plus a **500Gi** PVC — identical
+for all four.
+
+`28G` is decimal (26.08 GiB). Do not "correct" it to `28Gi`: that exceeds the
+node's 29.79 GiB allocatable and the pod sits `Pending`.
+
+28G rather than 14G because every dataset must fit in page cache. At 14G,
+OpenObserve's 15.5GB did not and Prometheus's 4.5GB did, which flattered
+Prometheus for reasons unrelated to its engine. Shrink these and check the
+largest dataset still fits.
 
 The Helm release name for both OpenObserve deployments must stay `o2` — it is
 what produces the Service name `o2-openobserve-standalone` that the collector's
@@ -46,11 +52,34 @@ write.
 
 **`mimir/`** — single-binary mode on filesystem blocks storage, replication
 factor 1. Write-path limits are raised far above the workload so nothing is
-throttled. **Query-path limits are left at their defaults on purpose** — the
-`err-mimir-max-chunks-per-query` failure on the 3-hour unfiltered histogram is a
-finding, not a broken deployment. Raising
-`-querier.max-fetched-chunks-per-query` would let it complete, at the cost of
-much more memory for a single query on a 14GB machine.
+throttled. Query-path limits: see below.
+
+## Query limits
+
+At their defaults, Prometheus and Mimir *refused* the million-series unfiltered
+histogram rather than running it — which measures the limit, not the engine.
+All four now get the same allowances:
+
+| System | Setting | Value | Default |
+| --- | --- | --- | --- |
+| Prometheus | `--query.max-samples` | 1e9 | 50e6 |
+| Prometheus | `--query.timeout` | 600s | 2m |
+| Mimir | `limits.max_fetched_chunks_per_query` | 20e6 | 2e6 |
+| Mimir | `querier.timeout` | 600s | 2m |
+| Mimir | `server.http_server_write_timeout` | 600s | 2m |
+| OpenObserve | (default) | 600s | 600s |
+
+600s is OpenObserve's default; the others are matched to it.
+
+Two Mimir gotchas:
+
+- **Both timeouts are required.** `http_server_write_timeout` also defaults to
+  2m and fires first, closing the connection before Mimir can write its timeout
+  response — the client sees a bare TCP close (`curl` reports `000`), not a
+  readable error.
+- `querier.timeout` belongs to the **top-level `querier` block**. Under `limits`
+  it fails at startup: `field querier_timeout not found in type
+  validation.plainLimits`.
 
 **`openobserve-parquet/` and `openobserve-vortex/`** — identical apart from
 `ZO_FILE_FORMAT`. Verify before every run:
@@ -104,7 +133,7 @@ custom resources, so the operator has to exist first.
 ## Storage
 
 Every PVC requests 500Gi from the **default StorageClass**. The published run
-used gp3 at its default profile (3000 IOPS / 125 MB/s), which is what produces
+uses gp3 at its default profile (3000 IOPS / 125 MB/s), which is what produces
 the cold-query behaviour discussed in the article. To pin it explicitly, create
 a StorageClass and set `persistence.storageClass` in the two OpenObserve values
 files and `storageClassName` in the two StatefulSets:

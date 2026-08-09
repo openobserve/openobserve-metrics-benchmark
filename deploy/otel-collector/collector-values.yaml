@@ -1,23 +1,8 @@
-# =============================================================================
-# The load path. This is the single most important file in the benchmark.
+# The load path. ONE collector scrapes fake-webserver and fans the result out,
+# unchanged, to all four systems -- so every system ingests byte-identical data.
 #
-# ONE OTel Collector scrapes the fake-webserver pods and fans the result out,
-# unchanged, to all four systems under test. Every system therefore receives
-# byte-identical input -- same samples, same timestamps, same label sets.
-#
-# All four exporters use `prometheusremotewrite` with identical queue and retry
-# settings. Mixing OTLP for OpenObserve with remote write for the others would
-# put a different protocol and parsing cost on each side and pollute the
-# comparison, so it is deliberately not done.
-#
-# This file is derived from the collector that produced the published numbers,
-# stripped of the exporters and pipelines that shipped the operator's own
-# cluster telemetry to their internal OpenObserve. Those pipelines never touched
-# the systems under test (a `filter/drop_perf_fakeserver` processor kept
-# perf-fakeserver out of them, and a `filter/only_perf_fakeserver` kept
-# everything else out of the perf path), so removing them does not change the
-# measured workload.
-# =============================================================================
+# All four exporters use prometheusremotewrite with identical queue/retry
+# settings. Mixing OTLP for OpenObserve would compare different parsers.
 
 k8sCluster: "metrics-benchmark"
 
@@ -29,11 +14,8 @@ image:
   # `./install.sh` silently rolls the collector to a different build.
   tag: "0.138.0"
 
-# This chart renders OpenTelemetryCollector CRs, so the OpenTelemetry Operator
-# must already exist in the cluster. install.sh installs it (plus cert-manager,
-# which the operator's release manifest requires). The operator is NOT a
-# subchart of this chart -- setting `opentelemetry-operator.enabled` here does
-# nothing.
+# Needs the OpenTelemetry Operator already in the cluster; install.sh handles
+# it. The operator is NOT a subchart -- setting it enabled here does nothing.
 
 # Not part of the benchmark; it only adds series to pipelines we removed.
 kube-state-metrics:
@@ -43,9 +25,7 @@ autoinstrumentation:
   enabled: false
 
 exporters:
-  # The chart's defaults ship cluster telemetry to api.openobserve.ai with
-  # placeholder credentials. Nothing references them once the default pipelines
-  # are removed below, but null them out so `helm get values` stays honest.
+  # Chart defaults ship telemetry elsewhere; nulled so `helm get values` is honest.
   otlphttp/openobserve: null
   otlphttp/openobserve_k8s_events: null
 
@@ -65,8 +45,7 @@ exporters:
     endpoint: http://perf-prometheus-standalone.perf-prometheus.svc.cluster.local:9090/api/v1/write
     remote_write_queue:
       enabled: true
-      # Exporter default. 24 pods scraped every 15s does not need more, and four
-      # queues at 100k each is enough buffered data to trip memory_limiter.
+      # Exporter default; four queues at 100k is enough to trip memory_limiter.
       queue_size: 10000
       num_consumers: 10
     retry_on_failure:
@@ -115,8 +94,7 @@ gateway:
   nodeSelector: {}
   tolerations:
     - operator: Exists
-  # memory_limiter below starts refusing at ~3.3GiB, comfortably under this 6Gi
-  # container limit, so the process sheds load rather than being OOMKilled.
+  # memory_limiter refuses at ~3.3GiB, under this limit: sheds load, not OOMKilled.
   resources:
     limits:
       cpu: 4
@@ -198,11 +176,8 @@ gateway:
       metrics: null
       traces: null
 
-      # One scrape, fanned out unchanged to all four systems under test, so they
-      # each ingest exactly the same series.
-      # No k8sattributes -- the relabel_configs above already stamp
-      # namespace/pod/node, and prometheusremotewrite would drop resource
-      # attributes anyway.
+      # No k8sattributes: relabel_configs already stamp namespace/pod/node, and
+      # prometheusremotewrite drops resource attributes anyway.
       metrics/perf_fakeserver:
         receivers: [prometheus/perf-fakeserver]
         processors: [memory_limiter, attributes, batch]
@@ -212,15 +187,9 @@ gateway:
           - prometheusremotewrite/perf-o2-parquet
           - prometheusremotewrite/perf-o2-vortex
 
-# =============================================================================
-# Agent (DaemonSet): pod/container resource usage for the fake-webserver pods,
-# also fanned out to all four systems.
-#
-# This is a rounding error next to the scrape above -- 24 pods every 30s against
-# ~1M series scraped every 15s -- and it does NOT produce the codelab_api_*
-# metrics the queries run against. Set `agent.enabled: false` if you want the
-# absolute minimum footprint; it will not change the query results.
-# =============================================================================
+# Agent (DaemonSet): pod resource usage, also fanned out to all four. A rounding
+# error next to the gateway scrape, and not the metrics the queries use --
+# `agent.enabled: false` changes nothing in the results.
 agent:
   enabled: true
   tolerations:

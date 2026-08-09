@@ -1,15 +1,11 @@
 # OpenObserve single-node, storing files in PARQUET.
 #
-# This file and deploy/openobserve-vortex/values.yaml differ in exactly one
-# meaningful line: ZO_FILE_FORMAT. Diff them before every run --
-#   diff deploy/openobserve-parquet/values.yaml deploy/openobserve-vortex/values.yaml
-# should show only ZO_FILE_FORMAT (parquet vs vortex) and the comments naming it.
+# Differs from ../openobserve-vortex/values.yaml in ZO_FILE_FORMAT only.
+# Diff the two before every run; anything else means the A/B is contaminated.
 
 image:
   oss:
     repository: openobserve/openobserve
-    # The published run used v0.92.0-rc3. The tag is a multi-arch manifest, so
-    # it works on both Graviton (arm64) and x86 nodes.
     tag: "v0.92.0-rc3"
   enterprise:
     repository: openobserve/openobserve-enterprise
@@ -47,13 +43,9 @@ cache:
 
 persistence:
   enabled: true
-  # This is the primary data store, not just a cache: WAL + data files + the
-  # sqlite meta store all live here. 500Gi matches Prometheus and Mimir so the
-  # comparison is like for like.
+  # Primary data store (WAL + data + sqlite meta), 500Gi to match the others.
   size: 500Gi
-  # Leave empty to use the cluster default StorageClass. See deploy/README.md --
-  # the published run used gp3 at its default 3000 IOPS / 125 MB/s profile, which
-  # is what produces the ~30s cold-query behaviour described in the article.
+  # Empty = cluster default. gp3's 125 MB/s is what drives cold-query times.
   storageClass: ""
   accessModes:
     - ReadWriteOnce
@@ -69,9 +61,8 @@ headless:
   service:
     annotations: {}
 
-# Demo credentials. base64("root@example.com:Complexpass#123") is the
-# Authorization header used by the collector's remote-write exporters and by
-# bench/config.sh. Change it in all three places together.
+# Demo credentials. Also encoded in the collector's exporters and in
+# bench/config.sh -- change all three together.
 auth:
   ZO_ROOT_USER_EMAIL: "root@example.com"
   ZO_ROOT_USER_PASSWORD: "Complexpass#123"
@@ -98,15 +89,12 @@ config:
   ZO_CLUSTER_NAME: "o2"
   ZO_INSTANCE_NAME: ""
   ZO_NODE_ROLE: "all"
-  # Single node on local disk. Both are required for that: ZO_LOCAL_MODE_STORAGE
-  # only takes effect while ZO_LOCAL_MODE is true.
+  # Both required: ZO_LOCAL_MODE_STORAGE only applies while ZO_LOCAL_MODE=true.
   ZO_LOCAL_MODE: "true"
   ZO_LOCAL_MODE_STORAGE: "disk"
   ZO_DATA_DIR: "./data/"
   ZO_UI_ENABLED: "true"
-  # Set this to the externally reachable URL if you expose the UI through an
-  # ingress/gateway; OpenObserve builds redirects and share links from it. Empty
-  # is fine when you reach the UI via `kubectl port-forward`.
+  # Only needed if you expose the UI; empty is fine behind port-forward.
   ZO_WEB_URL: ""
   ZO_BASE_URI: ""
   # Standalone: sqlite on the PVC replaces the postgres + nats control plane.
@@ -122,16 +110,13 @@ config:
   RUST_BACKTRACE: "0"
 
 extraEnv:
-  # The unfiltered histogram touches ~1.08M series; the defaults would reject it
-  # before the engine ever ran, which would make the comparison meaningless.
+  # Defaults would reject the ~1.08M-series unfiltered histogram outright.
   - name: ZO_METRICS_MAX_SERIES_RESPONSE
     value: "40000"
   - name: ZO_METRICS_MAX_POINTS_PER_SERIES
     value: "10000000"
-  # ON by default. Turned OFF here because in these metrics tests it made
-  # queries ~20% SLOWER. It only affects parquet -- vortex always pushes filters
-  # down -- but it is set identically in both values files so the two
-  # deployments stay a clean A/B.
+  # ON by default; OFF here because it measured ~20% SLOWER. Affects parquet
+  # only, but set identically in both files to keep the A/B clean.
   - name: ZO_FEATURE_PUSHDOWN_FILTER_ENABLED
     value: "false"
   # Fairness: no query result caching, matching "caches disabled" on the others.
@@ -165,36 +150,25 @@ blockedMetrics:
       cpu: 50m
       memory: 128Mi
 
-# Reach the UI/API with `bench/port-forward.sh` instead. Exposing it depends on
-# what your cluster runs (nginx ingress, Gateway API, a LoadBalancer Service),
-# and none of that affects the measurements.
+# Use bench/port-forward.sh instead; ingress choice does not affect measurements.
 ingress:
   enabled: false
 
 gateway:
   enabled: false
 
-# One system per c7g.2xlarge perf node. Allocatable is 7910m / 14680Mi and the
-# daemonsets take 148m / 909Mi, leaving 7762m / 13771Mi -- so 7C/14G sits close
-# to the ceiling, with 762m CPU and 420Mi memory to spare. requests == limits
-# puts the pod in Guaranteed QoS so memory is never reclaimed and CPU shares are
-# fixed -- identical across all four systems under test.
-#
-# 14G is DECIMAL: 14e9 bytes = 13351Mi. Do NOT "correct" it to 14Gi -- that is
-# 14336Mi, 565Mi more than the node has left, and the pod would sit Pending
-# forever.
+# 7C/28G, identical on all four systems. See deploy/README.md#sizing.
 resources:
   limits:
     cpu: 7
-    memory: 14G
+    memory: 28G
   requests:
     cpu: 7
-    memory: 14G
+    memory: 28G
 
 nodeSelector: {}
 
-# Same taint as prometheus / mimir so all four systems share the perf node pool
-# and each lands on a node of its own.
+# Same taint as the others: one system per perf node.
 tolerations:
   - key: perf
     operator: Equal
