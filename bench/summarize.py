@@ -33,8 +33,13 @@ WINDOW_ORDER = ["30m", "1h", "3h"]
 
 
 def load(path):
-    """rows[query][window][system] -> list of (latency_ms, error) in run order."""
-    rows = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+    """(warm, cold), each [query][window][system] -> [(latency_ms, error)].
+
+    run 0 is the cold first-touch request. It is kept apart from runs 1..N so a
+    cold outlier never lands in a median that is meant to describe warm queries.
+    """
+    warm = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+    cold = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
     queries, windows = [], []
     with open(path, newline="") as fh:
         for r in csv.DictReader(fh):
@@ -43,8 +48,9 @@ def load(path):
                 queries.append(q)
             if w not in windows:
                 windows.append(w)
-            rows[q][w][s].append((int(r["latency_ms"] or 0), r["error"]))
-    return rows, queries, windows
+            bucket = cold if r.get("run") == "0" else warm
+            bucket[q][w][s].append((int(r["latency_ms"] or 0), r["error"]))
+    return warm, cold, queries, windows
 
 
 def cell(runs):
@@ -68,9 +74,10 @@ def order(seen, preferred):
 def main():
     if len(sys.argv) != 2:
         sys.exit(__doc__)
-    rows, queries, windows = load(sys.argv[1])
+    rows, cold, queries, windows = load(sys.argv[1])
 
     seen_systems = {s for q in rows for w in rows[q] for s in rows[q][w]}
+    seen_systems |= {s for q in cold for w in cold[q] for s in cold[q][w]}
     systems = order(seen_systems, SYSTEM_ORDER)
     windows = order(windows, WINDOW_ORDER)
     queries = order(queries, list(QUERY_LABEL))
@@ -87,6 +94,22 @@ def main():
             if w not in rows[q]:
                 continue
             out.append(f"| {w} | " + " | ".join(cell(rows[q][w].get(s, [])) for s in systems) + " |")
+        out.append("")
+
+    if any(cold[q][w] for q in cold for w in cold[q]):
+        out += ["### Cold first-touch query", "",
+                "One unrecorded-in-medians request per cell, issued before the "
+                "warm runs above. This is what the first query after a gap "
+                "costs — file opens, index loads, page cache misses — not what "
+                "a warm dashboard costs.", "",
+                "| Query | Window | " + " | ".join(SYSTEM_LABEL.get(s, s) for s in systems) + " |",
+                "| --- | --- |" + " --- |" * len(systems)]
+        for q in queries:
+            for w in windows:
+                if w not in cold.get(q, {}):
+                    continue
+                vals = [cell(cold[q][w].get(s, [])) for s in systems]
+                out.append(f"| {QUERY_LABEL.get(q, q)} | {w} | " + " | ".join(vals) + " |")
         out.append("")
 
     widest = windows[-1] if windows else None

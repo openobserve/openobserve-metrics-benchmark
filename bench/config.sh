@@ -62,14 +62,28 @@ SYSTEMS=(
 # Runs per (system, query, window). The article reports all three raw values.
 : "${RUNS:=3}"
 
+# Cold first-touch request per cell, recorded as run 0 and kept OUT of the
+# medians -- summarize.py reports it separately. It measures file opens, index
+# loads and page cache misses, not steady-state query cost; measured up to 10x
+# the warm value. WARMUP=0 folds it into the recorded runs instead.
+: "${WARMUP:=1}"
+
+# Cells getting ONE recorded run instead of RUNS, as `query-id:window`. A 3h
+# unfiltered request costs minutes (Mimir: 351s) and its spread is dominated by
+# scan volume, not run-to-run noise. Run 0 still happens.
+: "${SINGLE_RUN_CELLS:=histogram-unfiltered:3h}"
+
 # End of the query range, RFC3339 or a unix timestamp. Default: 5 minutes ago,
 # so the newest data is already flushed everywhere. Pin an absolute value when
 # comparing across systems on different days.
 #   END_TIME=2026-08-06T03:00:00+08:00 ./run-benchmark.sh
 : "${END_TIME:=}"
 
-# Per-request timeout. Mimir's unfiltered histogram legitimately runs >60s.
-: "${CURL_TIMEOUT:=300}"
+# Per-request timeout. MUST exceed the servers' own query timeout (600s, see
+# deploy/README.md#query-limits) or curl cuts a query off first and the CSV
+# records our threshold as if it were the system's. Mimir's 3h unfiltered
+# histogram measured 351s.
+: "${CURL_TIMEOUT:=700}"
 
 # -----------------------------------------------------------------------------
 # Helpers

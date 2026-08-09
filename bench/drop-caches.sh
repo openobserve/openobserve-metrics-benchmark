@@ -14,13 +14,32 @@
 # system you name. Only run it on a dedicated benchmark node.
 set -euo pipefail
 
+# Namespaces default to what deploy/ installs, but are overridable for a
+# deployment that drifted:
+#   O2_PARQUET_NS=perf-o21 O2_VORTEX_NS=perf-o22 ./drop-caches.sh o2-parquet
+: "${PROM_NS:=perf-prometheus}"
+: "${MIMIR_NS:=perf-mimir}"
+: "${O2_PARQUET_NS:=perf-o2-parquet}"
+: "${O2_VORTEX_NS:=perf-o2-vortex}"
+
 case "${1:-}" in
-  prometheus) NS=perf-prometheus;  POD=prometheus-standalone-0 ;;
-  mimir)      NS=perf-mimir;       POD=mimir-standalone-0 ;;
-  o2-parquet) NS=perf-o2-parquet;  POD=o2-openobserve-standalone-0 ;;
-  o2-vortex)  NS=perf-o2-vortex;   POD=o2-openobserve-standalone-0 ;;
-  *) echo "usage: $0 {prometheus|mimir|o2-parquet|o2-vortex}" >&2; exit 1 ;;
+  prometheus) NS="${PROM_NS}";       POD=prometheus-standalone-0 ;;
+  mimir)      NS="${MIMIR_NS}";      POD=mimir-standalone-0 ;;
+  o2-parquet) NS="${O2_PARQUET_NS}"; POD=o2-openobserve-standalone-0 ;;
+  o2-vortex)  NS="${O2_VORTEX_NS}";  POD=o2-openobserve-standalone-0 ;;
+  all)        NS=""; POD="" ;;
+  *) echo "usage: $0 {prometheus|mimir|o2-parquet|o2-vortex|all}" >&2; exit 1 ;;
 esac
+
+# `all` drops the cache on every benchmark node, which is what you want between
+# rounds of a cold comparison -- dropping only one node's cache would leave the
+# other three warm and make the comparison meaningless.
+if [[ "${1}" == "all" ]]; then
+  for sys in prometheus mimir o2-parquet o2-vortex; do
+    "$0" "${sys}"
+  done
+  exit 0
+fi
 
 NODE="$(kubectl -n "${NS}" get pod "${POD}" -o jsonpath='{.spec.nodeName}')"
 [[ -n "${NODE}" ]] || { echo "could not resolve node for ${NS}/${POD}" >&2; exit 1; }

@@ -53,10 +53,10 @@ histogram_quantile(0.9, sum by(le, path) (
   rate(codelab_api_request_duration_seconds_bucket{path="$path"}[5m])))
 ```
 
-Query 2 is the stress test — it touches all ~1.08M bucket series. **Prometheus
-and Mimir are expected to return errors on it.** That is the finding, not a
-failed run; `run-benchmark.sh` records the error text and `summarize.py` renders
-those cells as `error ×3`.
+Query 2 is the stress test — it touches all ~1.08M bucket series. At stock
+limits Prometheus and Mimir *refuse* it outright; `deploy/` raises those limits
+so all four actually run it. `run-benchmark.sh` records any error text and
+`summarize.py` renders an all-error cell as `error ×N`.
 
 Queries 3 and 4 exist as a pair to show that the *filter type* barely matters —
 scan volume does.
@@ -69,8 +69,10 @@ scan volume does.
 | `WINDOWS` | `1800 3600 10800` | Seconds: 30m, 1h, 3h |
 | `STEP` | `15s` | Resolution for `query_range`. See the warning below |
 | `RUNS` | `3` | Repeats per (system, query, window) |
+| `WARMUP` | `1` | Cold first-touch request, recorded as run 0, excluded from medians |
+| `SINGLE_RUN_CELLS` | `histogram-unfiltered:3h` | Cells recorded once instead of `RUNS` |
 | `PATH_FILTER` | `/api/service-1` | The `$path` in queries 3 and 4 |
-| `CURL_TIMEOUT` | `300` | Mimir's unfiltered histogram legitimately runs >60s |
+| `CURL_TIMEOUT` | `700` | Must exceed the servers' own 600s query timeout |
 | `SYSTEMS_FILTER` | — | Substring; run one system only |
 | `QUERY_FILTER` | — | Substring; run one query only |
 | `O2_USER` / `O2_PASS` | `root@example.com` / `Complexpass#123` | Must match the OpenObserve values files |
@@ -102,7 +104,7 @@ PATH_FILTER=/api/foo ./run-benchmark.sh
 
 Each run creates `results/<UTC timestamp>/`:
 
-- `raw.csv` — one row per request: `query,window,system,run,http_code,latency_ms,series,error`
+- `raw.csv` — one row per request: `query,window,system,run,http_code,latency_ms,series,error` (`run=0` is the cold request)
 - `summary.md` — the article's tables, regenerated from `raw.csv`
 - `run-metadata.txt` — the exact parameters used, so a CSV is never orphaned
 
@@ -117,56 +119,39 @@ what a dashboard actually waits for.
 
 ### Measure from inside the cluster
 
-**Do not publish numbers from a port-forwarded run.** `port-forward.sh` tunnels
-every request through the Kubernetes API server, and that hop is not a rounding
-error. Measured against the EKS deployment from a workstation, a trivial
-`query=1` — which Prometheus answers in microseconds — took **~1,070ms** round
-trip. The same request from a pod in the cluster took **~5ms**.
+**Do not publish numbers from a port-forwarded run.** The API-server hop cost
+**~1,070ms** for a trivial `query=1` that Prometheus answers in microseconds;
+the same request from an in-cluster pod cost **~5ms**.
 
-Worse, the overhead is not a constant you can subtract. It scales with response
-size, because the tunnel is also a throughput bottleneck. The same `irate` query
-at the same `END_TIME`, both ways:
+The overhead is not a constant you can subtract — it grows with response size,
+so it swamps a fast system and barely dents a slow one. Same `irate` query, same
+`END_TIME`:
 
-| System | via port-forward | in-cluster | overhead |
-| --- | --- | --- | --- |
-| Prometheus | 3445 ms | 1287 ms | +2158 |
-| Mimir | 4181 ms | 1319 ms | +2862 |
-| OpenObserve · Parquet | 2122 ms | 158 ms | +1964 |
-| OpenObserve · Vortex | 1953 ms | 297 ms | +1656 |
+| System | via port-forward | in-cluster |
+| --- | --- | --- |
+| Prometheus | 3445 ms | 1287 ms |
+| Mimir | 4181 ms | 1319 ms |
+| OpenObserve · Parquet | 2122 ms | 158 ms |
+| OpenObserve · Vortex | 1953 ms | 297 ms |
 
-Port-forwarding does not merely inflate the absolutes — it compresses the
-systems together and destroys the ratios. Parquet vs Prometheus reads as 1.6×
-through the tunnel and 8.1× in the cluster, because a ~2s floor swamps a 158ms
-query while barely denting a 1287ms one. The fast system is punished hardest.
+A real 8.1× gap reads as 1.6× through the tunnel. The fastest system is punished
+hardest.
 
-So run it in the cluster:
-
-```bash
-./run-in-cluster.sh
-```
-
-That starts a small pod on a node that is *not* under test (it carries no `perf`
-toleration, so it cannot land on the four tainted benchmark nodes and steal
-their CPU), pinned to the same AZ as the four systems so the hop is intra-AZ and
-equal for all of them. It then copies `bench/` in, runs `run-benchmark.sh`
-there against ClusterIP Service DNS, and copies `results/<stamp>/` back here —
-same layout as a local run, plus a `measured_from` line in `run-metadata.txt`.
-
-It takes the same knobs as `run-benchmark.sh`, and the namespaces are
-overridable if your deployment drifted from `deploy/`:
+`run-in-cluster.sh` starts a runner pod on a node that is *not* under test (no
+`perf` toleration, so it cannot steal CPU from what it measures), pinned to the
+systems' AZ, runs the driver against ClusterIP DNS, and copies
+`results/<stamp>/` back with a `measured_from` line in `run-metadata.txt`.
 
 ```bash
 RUNS=5 WINDOWS="1800 3600" ./run-in-cluster.sh
 O2_PARQUET_NS=perf-o21 O2_VORTEX_NS=perf-o22 ./run-in-cluster.sh
-./run-in-cluster.sh --delete     # remove the runner pod when you are done
+./run-in-cluster.sh --delete     # remove the runner pod
 ```
 
 The pod is left running between invocations so repeat runs skip setup.
 
-Nothing in the measurement path needs `port-forward.sh` any more. It survives
-for the one thing no in-cluster pod can do — opening a Prometheus, Mimir or
-OpenObserve UI in your browser — and for ad-hoc poking. Reaching a system that
-way is fine; *timing* one that way is not.
+`port-forward.sh` survives only for what a pod cannot do: opening a UI in your
+browser. Reaching a system that way is fine; *timing* one that way is not.
 
 ## Resource usage
 
@@ -175,9 +160,16 @@ way is fine; *timing* one that way is not.
 ./resources.sh 12 300     # 12 snapshots, 5 minutes apart
 ```
 
-CPU, memory and PVC usage all come from one kubelet `/stats/summary` call per
-node, so the three numbers are consistent with each other and no metrics-server
-is needed. CPU is an instantaneous rate — take several snapshots during
+CPU and PVC usage come from one kubelet `/stats/summary` call per node, so no
+metrics-server is needed.
+
+> **Two memory columns, and they disagree.** `rss` is anonymous pages only;
+> `workset` is cgroup `workingSetBytes` = rss + active page cache + kernel
+> memory. A system writing data files continuously accumulates page cache, so
+> OpenObserve reads ~1.5GB rss against ~10GB workset — by workset it looks like
+> the heaviest of the four, by rss it is the lightest. **Compare on rss**, and
+> say so when you publish. (rss excludes file-backed mmap pages, so it
+> undercounts Prometheus and Mimir; they still land above OpenObserve.) CPU is an instantaneous rate — take several snapshots during
 steady-state ingestion rather than trusting one reading. Disk only means
 something after ingestion has run long enough to compact.
 

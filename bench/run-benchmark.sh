@@ -41,6 +41,7 @@ end_time_utc    $(python3 -c "import datetime,sys;print(datetime.datetime.fromti
 windows_sec     ${WINDOWS}
 step            ${STEP}
 runs            ${RUNS}
+warmup          ${WARMUP} (unrecorded requests per cell before the recorded runs)
 path_filter     ${PATH_FILTER}
 prometheus      ${PROM_BASE}
 mimir           ${MIMIR_BASE}
@@ -75,6 +76,56 @@ PY
 
 csv_escape() { printf '"%s"' "${1//\"/\"\"}"; }
 
+# Issues one request and appends one CSV row. Reads the loop's variables
+# (qid, label, sys, base, auth_args, promql, start_ts, run) from the enclosing
+# scope; `run` is 0 for the cold first-touch request.
+do_request() {
+  local timing http_code secs ms series errmsg parsed
+
+  # %{time_total} is the full request wall time as seen by the client.
+  # ${arr[@]+"${arr[@]}"} is the portable way to expand a possibly-empty array
+  # under `set -u`; plain "${arr[@]}" is an unbound-variable error on bash 3.2
+  # (what macOS ships).
+  : > "${BODY}"
+  # curl still emits -w output on timeout (with http_code 000), so keep
+  # whatever it gave us rather than discarding it on a non-zero exit.
+  timing="$(curl -sS -o "${BODY}" -w '%{http_code} %{time_total}' \
+    --max-time "${CURL_TIMEOUT}" \
+    ${auth_args[@]+"${auth_args[@]}"} \
+    --data-urlencode "query=${promql}" \
+    --data-urlencode "start=${start_ts}" \
+    --data-urlencode "end=${END_TS}" \
+    --data-urlencode "step=${STEP}" \
+    "${base}/api/v1/query_range" 2>/dev/null)" || true
+  [[ "${timing}" == *" "* ]] || timing="000 0"
+
+  http_code="${timing%% *}"
+  secs="${timing##* }"
+  ms="$(python3 -c "import sys;print(round(float(sys.argv[1])*1000))" "${secs}" 2>/dev/null || echo 0)"
+
+  if [[ "${http_code}" == "000" ]]; then
+    # No HTTP response at all: timed out, refused, or DNS failed. The elapsed
+    # time is still meaningful -- it is the timeout.
+    series="-"
+    errmsg="no response after ${ms}ms (timeout or connection failure)"
+  else
+    parsed="$(parse_body "${BODY}")"
+    series="${parsed%%$'\t'*}"
+    errmsg="${parsed#*$'\t'}"
+    [[ "${http_code}" != "200" && -z "${errmsg}" ]] && errmsg="HTTP ${http_code}"
+  fi
+
+  if [[ -n "${errmsg}" ]]; then
+    printf '%sERR ' "$([[ "${run}" == "0" ]] && echo '~' || true)"
+  else
+    printf '%s%s ' "$([[ "${run}" == "0" ]] && echo '~' || true)" "${ms}"
+  fi
+
+  printf '%s,%s,%s,%s,%s,%s,%s,%s\n' \
+    "${qid}" "${label}" "${sys}" "${run}" "${http_code}" "${ms}" "${series}" \
+    "$(csv_escape "${errmsg}")" >> "${RAW}"
+}
+
 for qid in "${QUERY_IDS[@]}"; do
   [[ -n "${QUERY_FILTER}" && "${qid}" != *"${QUERY_FILTER}"* ]] && continue
   promql="$(build_query "${qid}")"
@@ -94,49 +145,26 @@ for qid in "${QUERY_IDS[@]}"; do
       auth_args=()
       [[ -n "${auth}" ]] && auth_args=(--user "${auth}")
 
-      for run in $(seq 1 "${RUNS}"); do
-        # %{time_total} is the full request wall time as seen by the client.
-        # ${arr[@]+"${arr[@]}"} is the portable way to expand a possibly-empty
-        # array under `set -u`; plain "${arr[@]}" is an unbound-variable error
-        # on bash 3.2 (what macOS ships).
-        : > "${BODY}"
-        # curl still emits -w output on timeout (with http_code 000), so keep
-        # whatever it gave us rather than discarding it on a non-zero exit.
-        timing="$(curl -sS -o "${BODY}" -w '%{http_code} %{time_total}' \
-          --max-time "${CURL_TIMEOUT}" \
-          ${auth_args[@]+"${auth_args[@]}"} \
-          --data-urlencode "query=${promql}" \
-          --data-urlencode "start=${start_ts}" \
-          --data-urlencode "end=${END_TS}" \
-          --data-urlencode "step=${STEP}" \
-          "${base}/api/v1/query_range" 2>/dev/null)" || true
-        [[ "${timing}" == *" "* ]] || timing="000 0"
+      # Cells listed in SINGLE_RUN_CELLS get one recorded run instead of RUNS.
+      # For a cell where a single request costs minutes, repeating it buys
+      # little: its spread is dominated by scan volume, not by run-to-run noise.
+      cell_runs="${RUNS}"
+      for c in ${SINGLE_RUN_CELLS}; do
+        [[ "${qid}:${label}" == "${c}" ]] && cell_runs=1
+      done
 
-        http_code="${timing%% *}"
-        secs="${timing##* }"
-        ms="$(python3 -c "import sys;print(round(float(sys.argv[1])*1000))" "${secs}" 2>/dev/null || echo 0)"
+      # run 0 is the cold, first-touch request: file opens, metadata and index
+      # loads, page cache misses. It is RECORDED but kept out of the medians,
+      # because it answers a different question ("what does the first query
+      # after a gap cost?") than runs 1..N ("what does a warm dashboard cost?").
+      # summarize.py reports it in its own table. Printed as `~N` in the log.
+      for (( w = 0; w < WARMUP; w++ )); do
+        run=0
+        do_request
+      done
 
-        if [[ "${http_code}" == "000" ]]; then
-          # No HTTP response at all: timed out, refused, or DNS failed. The
-          # elapsed time is still meaningful -- it is the timeout.
-          series="-"
-          errmsg="no response after ${ms}ms (timeout or connection failure)"
-        else
-          parsed="$(parse_body "${BODY}")"
-          series="${parsed%%$'\t'*}"
-          errmsg="${parsed#*$'\t'}"
-          [[ "${http_code}" != "200" && -z "${errmsg}" ]] && errmsg="HTTP ${http_code}"
-        fi
-
-        if [[ -n "${errmsg}" ]]; then
-          printf 'ERR '
-        else
-          printf '%s ' "${ms}"
-        fi
-
-        printf '%s,%s,%s,%s,%s,%s,%s,%s\n' \
-          "${qid}" "${label}" "${sys}" "${run}" "${http_code}" "${ms}" "${series}" \
-          "$(csv_escape "${errmsg}")" >> "${RAW}"
+      for run in $(seq 1 "${cell_runs}"); do
+        do_request
       done
       echo
     done

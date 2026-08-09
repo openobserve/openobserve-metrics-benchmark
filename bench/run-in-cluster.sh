@@ -78,6 +78,26 @@ command -v kubectl >/dev/null || { echo "error: kubectl not found" >&2; exit 1; 
 
 kexec() { kubectl -n "${BENCH_NS}" exec "${BENCH_POD}" -- "$@"; }
 
+# Same, but retried: `kubectl exec` against this API server intermittently dies
+# with `error: EOF` or `websocket: close 1006` on perfectly good calls. Use this
+# for setup steps that must succeed and are idempotent (rm, mkdir, chmod, tar).
+#
+# NEVER use it to launch the benchmark. A launch that actually succeeded but
+# reported EOF would be retried into a SECOND concurrent run, and two runs
+# contending for CPU corrupt both sets of timings invisibly. The launch is
+# instead issued once and confirmed by polling.
+kexec_ok() {
+  local i
+  for (( i = 1; i <= 5; i++ )); do
+    if kubectl -n "${BENCH_NS}" exec "${BENCH_POD}" -- "$@" 2>/dev/null; then
+      return 0
+    fi
+    sleep 3
+  done
+  echo "error: 'kubectl exec ... $1' failed 5 times against ${BENCH_NS}/${BENCH_POD}" >&2
+  return 1
+}
+
 SCRIPT="run-benchmark.sh"
 SCRIPT_ARGS=()
 DELETE=0
@@ -209,10 +229,10 @@ echo "==> runner: $(kubectl -n "${BENCH_NS}" get pod "${BENCH_POD}" \
 # surprises about whether the destination directory already exists.
 # -----------------------------------------------------------------------------
 echo "==> copying bench/ to ${REMOTE_DIR}/bench"
-kexec sh -c "rm -rf ${REMOTE_DIR}/bench && mkdir -p ${REMOTE_DIR}/bench ${REMOTE_DIR}/results"
+kexec_ok sh -c "rm -rf ${REMOTE_DIR}/bench && mkdir -p ${REMOTE_DIR}/bench ${REMOTE_DIR}/results"
 tar cf - ./*.sh ./summarize.py \
   | kubectl -n "${BENCH_NS}" exec -i "${BENCH_POD}" -- tar xf - -C "${REMOTE_DIR}/bench"
-kexec sh -c "chmod +x ${REMOTE_DIR}/bench/*.sh ${REMOTE_DIR}/bench/summarize.py"
+kexec_ok sh -c "chmod +x ${REMOTE_DIR}/bench/*.sh ${REMOTE_DIR}/bench/summarize.py"
 
 # -----------------------------------------------------------------------------
 # 3. Run
@@ -225,8 +245,8 @@ envs=(
 )
 # Forward the knobs from config.sh, but only the ones actually set here, so the
 # defaults in config.sh stay in charge of everything else.
-for v in O2_USER O2_PASS PATH_FILTER WINDOWS STEP RUNS END_TIME CURL_TIMEOUT \
-         SYSTEMS_FILTER QUERY_FILTER; do
+for v in O2_USER O2_PASS PATH_FILTER WINDOWS STEP RUNS WARMUP SINGLE_RUN_CELLS \
+         END_TIME CURL_TIMEOUT SYSTEMS_FILTER QUERY_FILTER; do
   if [[ -n "${!v:-}" ]]; then envs+=("${v}=${!v}"); fi
 done
 
@@ -234,11 +254,125 @@ done
 # from one an earlier run left behind in a reused pod.
 before="$(kexec sh -c "ls -1 ${REMOTE_DIR}/results 2>/dev/null | sort | tail -1" | tr -d '\r')"
 
-echo "==> running ${SCRIPT} in-cluster"
+# Run DETACHED inside the pod, then poll.
+#
+# Driving a long run through `kubectl exec` directly does not survive: the
+# unfiltered histogram can spend minutes on a single request producing no
+# stdout, and the idle exec stream gets torn down with
+# `websocket: close 1006 (abnormal closure)`, killing the benchmark partway.
+# Detaching means the run owns its own lifetime -- a dropped connection, a
+# laptop lid, or a Ctrl-C costs you the log tail, not the results.
+LOG="${REMOTE_DIR}/run.log"
+EXITF="${REMOTE_DIR}/run.exit"
+
+# A previous run that lost its connection can still be alive in the pod, and a
+# second benchmark racing the first silently corrupts BOTH sets of timings --
+# they contend for the same CPU. (Seen in practice: a clean 145/123/121ms cell
+# reading 458/328/1867ms with an orphan running.) Reap before starting.
+# busybox `ps -o args` prints only a COMMAND header plus truncated entries and
+# does not reliably show the script name; `ps aux` does. `grep -c` also exits 1
+# on zero matches, which would trip `set -e`, hence the inner `|| true`.
+count_running() {
+  kexec sh -c "ps aux 2>/dev/null | grep -c '[r]un-benchmark' || true" 2>/dev/null \
+    | tr -d ' \r' | head -1 || echo 0
+}
+
+stale="$(kexec sh -c "ps -o pid,args 2>/dev/null | grep '[r]un-benchmark' | awk '{print \$1}'" 2>/dev/null | tr -d '\r' || true)"
+if [[ -n "${stale}" ]]; then
+  echo "==> reaping stale benchmark process(es) in pod: $(echo ${stale} | tr '\n' ' ')"
+  for p in ${stale}; do kexec kill -9 "${p}" >/dev/null 2>&1 || true; done
+  sleep 3
+fi
+
+# Assert quiescence rather than assume the reap worked. Starting on top of a
+# survivor is worse than not starting: both runs produce plausible-looking
+# numbers that are silently inflated by CPU contention, and nothing in the CSV
+# says so.
+remaining="$(count_running)"
+if [[ "${remaining}" =~ ^[0-9]+$ ]] && (( remaining > 0 )); then
+  echo "error: ${remaining} benchmark process(es) still running in ${BENCH_NS}/${BENCH_POD}." >&2
+  echo "  Concurrent runs contend for CPU and corrupt both sets of timings." >&2
+  echo "  Inspect with: kubectl -n ${BENCH_NS} exec ${BENCH_POD} -- ps aux" >&2
+  exit 1
+fi
+
+# Build a properly quoted command line for the pod's shell.
+remote_cmd="cd ${REMOTE_DIR}/bench && env"
+for kv in "${envs[@]}"; do
+  remote_cmd+=" $(printf '%q' "${kv}")"
+done
+remote_cmd+=" ./${SCRIPT}"
+for arg in ${SCRIPT_ARGS[@]+"${SCRIPT_ARGS[@]}"}; do
+  remote_cmd+=" $(printf '%q' "${arg}")"
+done
+
+echo "==> running ${SCRIPT} in-cluster (detached; safe to Ctrl-C this tail)"
 echo
-kubectl -n "${BENCH_NS}" exec "${BENCH_POD}" -- \
-  env "${envs[@]}" "${REMOTE_DIR}/bench/${SCRIPT}" \
-  ${SCRIPT_ARGS[@]+"${SCRIPT_ARGS[@]}"}
+
+# Clear prior state in its OWN call, and require it to succeed. Folding this
+# into the launch is how a failed launch masquerades as a running job: the
+# poller finds a leftover run.log, tails a dead run's output, and reports
+# progress for something that never started.
+kexec_ok sh -c "rm -f ${LOG} ${EXITF}"
+
+# `kubectl exec` frequently reports `error: EOF` when the remote shell exits
+# while its backgrounded child still holds the stream. That is not a launch
+# failure, so tolerate it and confirm by polling instead of trusting the exit
+# code. The trailing `sleep 1` also gives the child time to create the log.
+#
+# Retry only after confirming NOTHING is running -- a blind retry of a launch
+# that actually succeeded would put two benchmarks on the same CPU and silently
+# inflate both. Hence: launch, verify, and re-launch only from a proven-idle
+# pod.
+started=0
+for attempt in 1 2 3; do
+  kexec sh -c "( ${remote_cmd} > ${LOG} 2>&1; echo \$? > ${EXITF} ) </dev/null >/dev/null 2>&1 & sleep 1" || true
+
+  for _ in $(seq 1 10); do
+    if kexec sh -c "test -f ${LOG}" >/dev/null 2>&1; then started=1; break; fi
+    sleep 2
+  done
+  [[ "${started}" == "1" ]] && break
+
+  live="$(count_running)"
+  if [[ "${live}" =~ ^[0-9]+$ ]] && (( live > 0 )); then
+    echo "==> launch reported an error but ${live} process(es) are running; watching those" >&2
+    started=1
+    break
+  fi
+  echo "==> launch attempt ${attempt} produced nothing (pod idle); retrying" >&2
+done
+if [[ "${started}" != "1" ]]; then
+  echo "error: ${SCRIPT} did not start in ${BENCH_NS}/${BENCH_POD} after 3 attempts" >&2
+  exit 1
+fi
+
+# Poll, echoing only the newly appended lines.
+#
+# Every kexec here is `|| true`: this loop only WATCHES the run, so a transient
+# API-server hiccup -- or `cat` on the not-yet-created exit file, which exits 1
+# and under `set -e` + `pipefail` would abort the whole script -- must never
+# take down the watcher. The benchmark itself is detached and unaffected either
+# way; losing the tail is cosmetic, aborting here looks like a failed run.
+seen=0
+while true; do
+  total="$(kexec sh -c "wc -l < ${LOG} 2>/dev/null || echo 0" 2>/dev/null | tr -d ' \r' || true)"
+  if [[ "${total}" =~ ^[0-9]+$ ]] && (( total > seen )); then
+    kexec sh -c "tail -n +$((seen+1)) ${LOG} | head -n $((total - seen))" 2>/dev/null || true
+    seen="${total}"
+  fi
+  code="$(kexec sh -c "cat ${EXITF} 2>/dev/null || true" 2>/dev/null | tr -d ' \r' || true)"
+  if [[ -n "${code}" ]]; then
+    # Flush anything written between the last tail and the exit marker.
+    kexec sh -c "tail -n +$((seen+1)) ${LOG} 2>/dev/null || true" 2>/dev/null || true
+    if [[ "${code}" != "0" ]]; then
+      echo
+      echo "==> ${SCRIPT} exited ${code}; results below are whatever it managed to write" >&2
+    fi
+    break
+  fi
+  sleep 10
+done
 
 # -----------------------------------------------------------------------------
 # 4. Bring the results home
