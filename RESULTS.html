@@ -405,10 +405,10 @@
 
   <div class="lede">
     The problem with most metrics-system benchmarks is that everyone tests their own way: different data, different hardware, different queries. The results can't be compared.<br><br>
-    <strong>So we took the same 7.1 billion samples, pushed them through one OTel Collector into four systems simultaneously, and ran the exact same PromQL against each.</strong>
+    <strong>So we pushed the same ~1.2 billion samples through one OTel Collector into four systems simultaneously, stopped ingestion, and ran the exact same PromQL against each over an identical frozen window.</strong>
   </div>
 
-  <p>The contenders are four deployments with fully aligned configurations: <strong>Prometheus, Grafana Mimir, OpenObserve (Parquet format), and OpenObserve (Vortex format)</strong>. Each system gets a dedicated EC2 c7g.2xlarge (7 CPU / 14GB RAM / gp3 500GB), all query caches disabled, same time range, every query run three times.</p>
+  <p>The contenders are four deployments with fully aligned configurations: <strong>Prometheus, Grafana Mimir, OpenObserve (Parquet format), and OpenObserve (Vortex format)</strong>. Each system gets a dedicated EC2 m7g.2xlarge (7 CPU / 28G container limit / gp3 500Gi), query caches disabled, the same pinned time range, and identical query limits and timeouts. Ingestion is stopped before measuring, so all four query a frozen, identical dataset.</p>
 
   <!-- Hero chart: 3h filtered histogram -->
   <figure>
@@ -416,33 +416,33 @@
       <text x="40" y="34" font-family="sans-serif" font-size="15" font-weight="600" fill="#1a1a17">histogram_quantile + label filter, 3-hour window (median)</text>
       <text x="40" y="56" font-family="sans-serif" font-size="12" fill="#8a8a82">Same data · same PromQL · caches disabled · unit: ms</text>
 
-      <!-- Mimir 8010 -->
+      <!-- mimir 4542 -->
       <rect x="200" y="88" width="440" height="44" rx="3" fill="#ba7517" opacity="0.92"/>
       <text x="192" y="116" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">Mimir</text>
-      <text x="632" y="116" text-anchor="end" font-family="sans-serif" font-size="15" font-weight="700" fill="#ffffff">8,010</text>
+      <text x="632" y="116" text-anchor="end" font-family="sans-serif" font-size="15" font-weight="700" fill="#ffffff">4,542</text>
 
-      <!-- Prometheus 3184 -->
-      <rect x="200" y="148" width="175" height="44" rx="3" fill="#c14920" opacity="0.92"/>
-      <text x="192" y="176" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">Prometheus</text>
-      <text x="385" y="176" font-family="sans-serif" font-size="15" font-weight="700" fill="#c14920">3,184</text>
+      <!-- o2-parquet 4316 -->
+      <rect x="200" y="148" width="418" height="44" rx="3" fill="#185fa5" opacity="0.92"/>
+      <text x="192" y="176" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">O2 · Parquet</text>
+      <text x="610" y="176" text-anchor="end" font-family="sans-serif" font-size="15" font-weight="700" fill="#ffffff">4,316</text>
 
-      <!-- OO parquet 2200 -->
-      <rect x="200" y="208" width="121" height="44" rx="3" fill="#185fa5" opacity="0.92"/>
-      <text x="192" y="236" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">O2 · Parquet</text>
-      <text x="331" y="236" font-family="sans-serif" font-size="15" font-weight="700" fill="#185fa5">2,200</text>
+      <!-- prometheus 3403 -->
+      <rect x="200" y="208" width="330" height="44" rx="3" fill="#c14920" opacity="0.92"/>
+      <text x="192" y="236" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">Prometheus</text>
+      <text x="522" y="236" text-anchor="end" font-family="sans-serif" font-size="15" font-weight="700" fill="#ffffff">3,403</text>
 
-      <!-- OO vortex 915 -->
-      <rect x="200" y="268" width="50" height="44" rx="3" fill="#0f6e56"/>
+      <!-- o2-vortex 1472 -->
+      <rect x="200" y="268" width="143" height="44" rx="3" fill="#0f6e56"/>
       <text x="192" y="296" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">O2 · Vortex</text>
-      <text x="260" y="296" font-family="sans-serif" font-size="15" font-weight="700" fill="#0f6e56">915</text>
+      <text x="353" y="296" font-family="sans-serif" font-size="15" font-weight="700" fill="#0f6e56">1,472</text>
 
       <line x1="200" y1="330" x2="640" y2="330" stroke="#c8c1ad" stroke-width="1"/>
 
-      <rect x="435" y="200" width="205" height="52" rx="6" fill="#0f6e56"/>
-      <text x="537" y="223" text-anchor="middle" font-family="sans-serif" font-size="18" font-weight="700" fill="#ffffff">Vortex ≈ 8.8×</text>
-      <text x="537" y="243" text-anchor="middle" font-family="sans-serif" font-size="10.5" fill="#d4ebe2">faster than Mimir · 3.5× vs Prometheus</text>
+      <rect x="435" y="262" width="205" height="52" rx="6" fill="#0f6e56"/>
+      <text x="537" y="285" text-anchor="middle" font-family="sans-serif" font-size="18" font-weight="700" fill="#ffffff">Vortex ≈ 3.1×</text>
+      <text x="537" y="305" text-anchor="middle" font-family="sans-serif" font-size="10.5" fill="#d4ebe2">faster than Mimir · 2.3× vs Prometheus</text>
     </svg>
-    <figcaption>Figure 1 · 3-hour filtered histogram query. Bar lengths drawn to real scale: Vortex 915ms, Mimir 8,010ms.</figcaption>
+    <figcaption>Figure 1 · 3-hour filtered histogram query. Bar lengths drawn to real scale: Vortex 1,472ms, Mimir 4,542ms.</figcaption>
   </figure>
 
   <h2>The setup</h2>
@@ -450,7 +450,7 @@
   <p>Pin down the variables first — the numbers only mean something afterward.</p>
 
   <ul>
-    <li><strong>Hardware:</strong> one dedicated EC2 <code>c7g.2xlarge</code> per system, 7 CPU / 14GB RAM available, gp3 500GB disk</li>
+    <li><strong>Hardware:</strong> one dedicated EC2 <code>m7g.2xlarge</code> per system, 7 CPU / 28G container limit, gp3 500Gi disk</li>
     <li><strong>Versions:</strong> Prometheus <code>quay.io/prometheus/prometheus:v3.6.0</code>; Mimir <code>grafana/mimir:latest</code>; OpenObserve <code>0.92.0-rc3</code>, two OpenObserve deployments as an A/B: one with <code>ZO_FILE_FORMAT=parquet</code>, one with <code>ZO_FILE_FORMAT=vortex</code>. All single-node</li>
     <li><strong>Fairness settings:</strong> all query caches disabled; OpenObserve's Parquet filter pushdown disabled (<code>ZO_FEATURE_PUSHDOWN_FILTER_ENABLED=false</code> — it's on by default, but in our metrics tests it actually slowed queries by ~20%, so we turned it off; the switch only affects Parquet, Vortex's filter pushdown is always on)</li>
     <li><strong>Query range:</strong> 2026-08-06 00:00 – 03:00 (CST), every query executed 3 times, all three results shown in the tables</li>
@@ -496,7 +496,7 @@ limits:
 
   <p>The workload comes from <a href="https://github.com/openobserve/fake-webserver"><code>openobserve/fake-webserver:v2</code></a>: 24 pods, each producing ~45k time series, so <strong>the histogram's <code>_bucket</code> metric carries roughly 1.09 million active series</strong>.</p>
 
-  <p>On the collection side, a separately deployed OTel Collector <strong>writes the same data to all systems under test simultaneously</strong> — every system receives the exact same samples, <strong>7.1 billion in total</strong>.</p>
+  <p>On the collection side, a separately deployed OTel Collector <strong>writes the same data to all systems under test simultaneously</strong> — every system receives the exact same samples, <strong>~1.2 billion across the <code>codelab_api_*</code> metrics</strong>, spanning 1,085,760 bucket series.</p>
 
   <p>Cardinality of the two key metrics:</p>
 
@@ -509,96 +509,83 @@ limits:
 
   <h2>Ingestion: resource usage</h2>
 
-  <p>Steady-state resource usage during ingestion:</p>
+  <p>Measured over a 3-hour steady-state ingestion window (2026-08-07 07:00–10:00 UTC), from the container metrics reported per pod:</p>
 
   <table>
     <thead>
-      <tr><th>System</th><th>CPU (cores)</th><th>Memory</th><th>Disk</th></tr>
+      <tr><th>System</th><th>CPU (typical)</th><th>CPU (peak)</th><th>Memory</th><th>Disk</th></tr>
     </thead>
     <tbody>
-      <tr><td>Prometheus</td><td>0.6</td><td>2.0 GB</td><td>19.9 GB</td></tr>
-      <tr><td>Mimir</td><td>0.4</td><td>2.8 GB</td><td>34 GB</td></tr>
-      <tr><td>OpenObserve (Parquet)</td><td>1.0</td><td><strong>0.9 GB</strong></td><td>95 GB</td></tr>
-      <tr><td>OpenObserve (Vortex)</td><td>1.0</td><td><strong>0.9 GB</strong></td><td>95 GB</td></tr>
+      <tr><td>Prometheus</td><td>1.25</td><td>2.3</td><td>2.8 → 4.3 GB, rising</td><td>4.5 GB</td></tr>
+      <tr><td>Mimir</td><td>0.9</td><td>2.2</td><td>4.0 → 5.2 GB, rising</td><td>7.4 GB</td></tr>
+      <tr><td>OpenObserve (Parquet)</td><td>2.4</td><td>3.0</td><td><strong>1.2 → 1.5 GB, flat</strong></td><td>15.5 GB</td></tr>
+      <tr><td>OpenObserve (Vortex)</td><td>2.0</td><td>3.8</td><td><strong>1.4 → 1.8 GB, flat</strong></td><td>15.1 GB</td></tr>
     </tbody>
   </table>
 
   <figure>
     <svg width="100%" viewBox="0 0 692 300" xmlns="http://www.w3.org/2000/svg" role="img">
-      <defs><pattern id="errstripe1" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)"><rect width="8" height="8" fill="#f5dccd"/><rect width="4" height="8" fill="#c14920" opacity="0.6"/></pattern></defs>
-      <rect x="30" y="8" width="10" height="10" rx="2" fill="#c14920"/>
-      <text x="45" y="17" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
-      <rect x="151.0" y="8" width="10" height="10" rx="2" fill="#ba7517"/>
-      <text x="166.0" y="17" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
-      <rect x="236.0" y="8" width="10" height="10" rx="2" fill="#185fa5"/>
-      <text x="251.0" y="17" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Parquet</text>
-      <rect x="371.4" y="8" width="10" height="10" rx="2" fill="#0f6e56"/>
-      <text x="386.4" y="17" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
-      <text x="0" y="45" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">CPU (cores, lower is better)</text>
-      <line x1="0" y1="53" x2="328" y2="53" stroke="#e0d9c8" stroke-width="1"/>
-      <text x="100" y="74" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
-      <rect x="108" y="62" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="62" width="102.0" height="16" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="284" y="74" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">0.6</text>
-      <text x="100" y="98" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
-      <rect x="108" y="86" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="86" width="68.0" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="284" y="98" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">0.4</text>
-      <text x="100" y="122" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Parquet</text>
-      <rect x="108" y="110" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="110" width="170.0" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="284" y="122" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1.0</text>
-      <text x="100" y="146" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
-      <rect x="108" y="134" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="134" width="170.0" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="284" y="146" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1.0</text>
-      <text x="352" y="45" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Memory (GB, lower is better)</text>
-      <line x1="352" y1="53" x2="680" y2="53" stroke="#e0d9c8" stroke-width="1"/>
-      <text x="452" y="74" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
-      <rect x="460" y="62" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="62" width="121.4" height="16" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="636" y="74" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2.0</text>
-      <text x="452" y="98" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
-      <rect x="460" y="86" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="86" width="170.0" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="636" y="98" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2.8</text>
-      <text x="452" y="122" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Parquet</text>
-      <rect x="460" y="110" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="110" width="54.6" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="636" y="122" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">0.9</text>
-      <text x="452" y="146" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
-      <rect x="460" y="134" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="134" width="54.6" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="636" y="146" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">0.9</text>
-      <text x="0" y="177" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Disk (GB, lower is better)</text>
-      <line x1="0" y1="185" x2="328" y2="185" stroke="#e0d9c8" stroke-width="1"/>
-      <text x="100" y="206" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
-      <rect x="108" y="194" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="194" width="35.5" height="16" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="284" y="206" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">19.9</text>
-      <text x="100" y="230" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
-      <rect x="108" y="218" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="218" width="60.9" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="284" y="230" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">34</text>
-      <text x="100" y="254" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Parquet</text>
-      <rect x="108" y="242" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="242" width="170.0" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="284" y="254" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">95</text>
-      <text x="100" y="278" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
-      <rect x="108" y="266" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="266" width="170.0" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="284" y="278" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">95</text>
+      <text x="0" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">CPU (cores, typical — lower is better)</text>
+      <line x1="0" y1="27" x2="680" y2="27" stroke="#e0d9c8" stroke-width="1"/>
+      <text x="100" y="45" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
+      <rect x="108" y="36" width="291.7" height="11" rx="2" fill="#c14920" opacity="0.92"/>
+      <text x="408" y="45" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1.25</text>
+      <text x="100" y="61" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
+      <rect x="108" y="52" width="210.0" height="11" rx="2" fill="#ba7517" opacity="0.92"/>
+      <text x="326" y="61" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">0.9</text>
+      <text x="100" y="77" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Parquet</text>
+      <rect x="108" y="68" width="560.0" height="11" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="676" y="77" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2.4</text>
+      <text x="100" y="93" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
+      <rect x="108" y="84" width="466.7" height="11" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="583" y="93" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2</text>
+      <text x="0" y="119" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Memory (GB RSS at end of window — lower is better)</text>
+      <line x1="0" y1="127" x2="680" y2="127" stroke="#e0d9c8" stroke-width="1"/>
+      <text x="100" y="145" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
+      <rect x="108" y="136" width="463.1" height="11" rx="2" fill="#c14920" opacity="0.92"/>
+      <text x="579" y="145" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">4.3</text>
+      <text x="100" y="161" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
+      <rect x="108" y="152" width="560.0" height="11" rx="2" fill="#ba7517" opacity="0.92"/>
+      <text x="676" y="161" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">5.2</text>
+      <text x="100" y="177" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Parquet</text>
+      <rect x="108" y="168" width="161.5" height="11" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="278" y="177" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1.5</text>
+      <text x="100" y="193" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
+      <rect x="108" y="184" width="193.8" height="11" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="310" y="193" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1.8</text>
+      <text x="0" y="219" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Disk (GB, fully compacted — lower is better)</text>
+      <line x1="0" y1="227" x2="680" y2="227" stroke="#e0d9c8" stroke-width="1"/>
+      <text x="100" y="245" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
+      <rect x="108" y="236" width="162.6" height="11" rx="2" fill="#c14920" opacity="0.92"/>
+      <text x="279" y="245" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">4.5</text>
+      <text x="100" y="261" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
+      <rect x="108" y="252" width="267.4" height="11" rx="2" fill="#ba7517" opacity="0.92"/>
+      <text x="383" y="261" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">7.4</text>
+      <text x="100" y="277" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Parquet</text>
+      <rect x="108" y="268" width="560.0" height="11" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="676" y="277" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">15.5</text>
+      <text x="100" y="293" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
+      <rect x="108" y="284" width="545.5" height="11" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="662" y="293" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">15.1</text>
     </svg>
-    <figcaption>Figure 2 · Resource usage while ingesting 7.1B samples across ~1M active series. Each group normalized to its max.</figcaption>
+    <figcaption>Figure 2 · Resource usage while ingesting ~1.09M bucket series. Each group normalized to its max.</figcaption>
   </figure>
 
   <p>Three observations:</p>
 
-  <p><strong>Memory is OpenObserve's clear win.</strong> With a million active series, Prometheus and Mimir must keep series indexes and head blocks resident in memory — 2.0GB and 2.8GB respectively. Both OpenObserve variants hold steady at <strong>0.9GB</strong>, roughly a third of Mimir. As cardinality keeps climbing, TSDB-style memory grows near-linearly with active series, while OpenObserve's columnar write path is far less cardinality-sensitive — a fundamental difference in high-cardinality scenarios.</p>
+  <p><strong>Memory is OpenObserve's clear win.</strong> With a million active series, Prometheus and Mimir must keep series indexes and head blocks resident — and both climb steadily across the three-hour window, Prometheus from 2.8 to 4.3GB and Mimir from 4.0 to 5.2GB, neither having levelled off by the end. Both OpenObserve variants stay <strong>flat at 1.2–1.8GB</strong>: about a third of Prometheus and a quarter of Mimir. TSDB-style memory grows with active series; OpenObserve's columnar write path is far less cardinality-sensitive.</p>
 
-  <p><strong>OpenObserve pays for it in CPU.</strong> 1.0 core versus Prometheus's 0.6 and Mimir's 0.4 — the extra cycles go into columnar encoding and compression. At identical ingest throughput, that's the price paid for query performance and low memory.</p>
+  <p><strong>OpenObserve pays for it in CPU.</strong> ~2.0–2.4 cores versus Prometheus's ~1.25 and Mimir's ~0.9 — roughly 2× and 2.5×. The extra cycles go into columnar encoding and compression. At identical ingest throughput, that is the price paid for query performance and low memory.</p>
 
-  <p><strong>Disk usage is largest for OpenObserve, and it deserves context.</strong> 95GB versus Prometheus's 19.9GB and Mimir's 34GB. A general-purpose columnar format keeps full detail rather than applying TSDB-style XOR/delta compression tuned specifically for time series; in exchange, the same data simultaneously serves SQL, PromQL, and arbitrary dimensional analysis, and maps naturally onto object storage — in production those 95GB typically live on S3, not a local disk, at a very different unit cost. Parquet and Vortex tie on disk usage at 95GB each.</p>
+  <p><strong>A note on measuring memory.</strong> These figures are <strong>RSS</strong> (<code>k8s.pod.memory.rss</code>, anonymous pages only). Which metric you pick decides the answer: by RSS, OpenObserve holds 1.5GB against Prometheus's 4.3GB; by cgroup <code>memory.workingSetBytes</code> it reads ~10GB against ~3.5GB — the ordering inverts. Working set is RSS <em>plus active page cache charged to the cgroup</em>, and a system continuously writing columnar files accumulates a lot of that: cache the kernel reclaims on demand, not memory the process needs. RSS is not perfect either — it excludes file-backed mmap pages, so it undercounts Prometheus and Mimir, which mmap their chunk files — but they still come out well above OpenObserve. Whichever you use, say which.</p>
+
+  <p><strong>Disk usage is largest for OpenObserve, and it deserves context.</strong> 15.5GB versus Prometheus's 4.5GB and Mimir's 7.4GB — ~3.4× and ~2.1×. A general-purpose columnar format keeps full detail rather than applying TSDB-style XOR/delta compression tuned specifically for time series; in exchange, the same data simultaneously serves SQL, PromQL, and arbitrary dimensional analysis, and maps naturally onto object storage, where it typically lives in production at a very different unit cost. Parquet and Vortex tie, at 15.5 and 15.1GB, and both released ~7GB when compaction settled after ingestion stopped. Disk here covers ~4.8 hours of ingestion, so the absolute figures are not comparable to longer runs — the ratio is the durable part.</p>
+
+  <p><strong>Disk is the one number you cannot measure right after stopping ingestion.</strong> Twelve minutes after the last write, Prometheus read 6.1GB and Mimir 10.8GB; 38 hours later the same volumes held 4.5GB and 7.4GB — 26% and 31% smaller, while OpenObserve did not move. Two stable readings 30 seconds apart prove nothing.</p>
+
+  <p>The wait is not symmetric. OpenObserve deletes merged-away files after 2h (<code>ZO_COMPACT_DELETE_FILES_DELAY_HOURS</code>) and settles at ~2h; Prometheus deletes source blocks immediately after compaction and settles at ~2–3h; <strong>Mimir needs ~14h</strong>, and neither of its timers can usefully be shortened. Its PVC holds two copies: the filesystem bucket, whose superseded source blocks the compactor keeps for <code>deletion_delay: 12h</code>, and the ingester's local TSDB, kept for <code>blocks_storage.tsdb.retention_period: 13h</code> after upload. Lowering the first only moves an intermediate drop earlier — the volume still waits on the 13-hour timer — and the second must not be lowered at all: it is aligned with <code>query_store_after: 12h</code>, and dropping the ingester's copy early makes queries silently return incomplete results. Wait ~14 hours, or say your disk figures are provisional.</p>
+
+  <p><strong>Measuring early biases the comparison towards OpenObserve.</strong> At t+12min OpenObserve's disk looked like 2.5× Prometheus and 1.4× Mimir; settled, it is <strong>3.4× and 2.1×</strong>. OpenObserve uses more disk than either, and an early reading understates by how much.</p>
 
   <h2>Queries: four PromQL expressions, three time windows</h2>
 
@@ -613,9 +600,9 @@ limits:
       <tr><th>Window</th><th>Prometheus</th><th>Mimir</th><th>O2 · Parquet</th><th>O2 · Vortex</th></tr>
     </thead>
     <tbody>
-      <tr><td>30m</td><td>913<br>710<br>713</td><td>801<br>812<br>773</td><td><strong>80<br>89<br>82</strong></td><td>94<br>97<br>102</td></tr>
-      <tr><td>1h</td><td>1317<br>1553<br>1331</td><td>2501<br>2478<br>2467</td><td><strong>144<br>156<br>156</strong></td><td>149<br>163<br>173</td></tr>
-      <tr><td>3h</td><td>3482<br>3450<br>3441</td><td>8745<br>8700<br>8649</td><td><strong>408<br>415<br>409</strong></td><td>437<br>433<br>435</td></tr>
+      <tr><td>30m</td><td>1,213</td><td>1,247</td><td>108</td><td><strong>101</strong></td></tr>
+      <tr><td>1h</td><td>2,528</td><td>1,924</td><td>185</td><td><strong>168</strong></td></tr>
+      <tr><td>3h</td><td>7,167</td><td>9,083</td><td><strong>676</strong></td><td>678</td></tr>
     </tbody>
   </table>
 
@@ -637,9 +624,9 @@ limits:
       <tr><th>Window</th><th>Prometheus</th><th>Mimir</th><th>O2 · Parquet</th><th>O2 · Vortex</th></tr>
     </thead>
     <tbody>
-      <tr><td>30m</td><td class="err">error<br>error<br>error</td><td>21845<br>21655<br>21632</td><td>2037<br>2068<br>2054</td><td><strong>2140<br>1966<br>1968</strong></td></tr>
-      <tr><td>1h</td><td class="err">error<br>error<br>error</td><td>67674<br>66736<br>67011</td><td><strong>6871<br>4176<br>4127</strong></td><td>4200<br>4798<br>4824</td></tr>
-      <tr><td>3h</td><td class="err">error<br>error<br>error</td><td class="err">error<br>error<br>error</td><td><strong>16080<br>12272<br>12286</strong></td><td>14090<br>13862<br>13875</td></tr>
+      <tr><td>30m</td><td>34,491</td><td>34,754</td><td>4,970</td><td><strong>4,710</strong></td></tr>
+      <tr><td>1h</td><td>66,635</td><td>56,162</td><td><strong>8,388</strong></td><td>8,986</td></tr>
+      <tr><td>3h</td><td>197,427</td><td>260,224</td><td><strong>27,049</strong></td><td>27,629</td></tr>
     </tbody>
   </table>
 
@@ -662,47 +649,47 @@ selected by the query.</code></pre>
       <line x1="0" y1="27" x2="328" y2="27" stroke="#e0d9c8" stroke-width="1"/>
       <text x="100" y="48" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="108" y="36" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="36" width="170.0" height="16" rx="2" fill="url(#errstripe2)" opacity="0.92"/>
-      <text x="284" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">error</text>
+      <rect x="108" y="36" width="170.0" height="16" rx="2" fill="#c14920" opacity="0.92"/>
+      <text x="284" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">66.6s</text>
       <text x="100" y="72" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
       <rect x="108" y="60" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="60" width="170.0" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="284" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">67.0s</text>
+      <rect x="108" y="60" width="143.3" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
+      <text x="284" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">56.2s</text>
       <text x="100" y="96" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Parquet</text>
       <rect x="108" y="84" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="84" width="10.5" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="284" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">4.2s</text>
+      <rect x="108" y="84" width="21.4" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="284" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">8.4s</text>
       <text x="100" y="120" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
       <rect x="108" y="108" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="108" width="12.2" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="284" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">4.8s</text>
+      <rect x="108" y="108" width="22.9" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="284" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">9.0s</text>
       <text x="352" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Unfiltered histogram · 3h (median)</text>
       <line x1="352" y1="27" x2="680" y2="27" stroke="#e0d9c8" stroke-width="1"/>
       <text x="452" y="48" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="460" y="36" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="36" width="170.0" height="16" rx="2" fill="url(#errstripe2)" opacity="0.92"/>
-      <text x="636" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">error</text>
+      <rect x="460" y="36" width="129.0" height="16" rx="2" fill="#c14920" opacity="0.92"/>
+      <text x="636" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">197.4s</text>
       <text x="452" y="72" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
       <rect x="460" y="60" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="60" width="170.0" height="16" rx="2" fill="url(#errstripe2)" opacity="0.92"/>
-      <text x="636" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">error</text>
+      <rect x="460" y="60" width="170.0" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
+      <text x="636" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">260.2s</text>
       <text x="452" y="96" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Parquet</text>
       <rect x="460" y="84" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="84" width="150.6" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="636" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">12.3s</text>
+      <rect x="460" y="84" width="17.7" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="636" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">27.0s</text>
       <text x="452" y="120" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
       <rect x="460" y="108" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="108" width="170.0" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="636" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">13.9s</text>
+      <rect x="460" y="108" width="18.0" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="636" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">27.6s</text>
     </svg>
     <figcaption>Figure 3 · Million-series unfiltered histogram. Striped bars indicate the query failed with an error.</figcaption>
   </figure>
 
   <div class="pull">
-    Against a million-series unfiltered histogram, the question is no longer "who's faster" — it's <strong>"who finishes at all"</strong>. Of the four systems, only OpenObserve returned results on every window.
+    Against a million-series unfiltered histogram, the defaults decide the outcome before the engines do: Prometheus and Mimir both <strong>refuse</strong> the query at stock limits. Given the same allowances and the same 600s clock, all four finish every window — and the spread is an order of magnitude.
   </div>
 
-  <p>To be fair, both Prometheus's and Mimir's errors are protective limits. Raising the relevant knobs (e.g. Mimir's <code>-querier.max-fetched-chunks-per-query</code>) might let the queries complete — but that means allowing a single query to consume far more memory, at your own risk on a 14GB machine. OpenObserve's columnar execution path doesn't need to load all series chunks into memory, so <strong>with default settings it finishes the 1h window in under 5 seconds and the 3h window in 12–14 seconds</strong>.</p>
+  <p>At stock settings Prometheus and Mimir <em>refuse</em> this query rather than run it — Prometheus with <code>query processing would load too many samples into memory</code>, Mimir with <code>err-mimir-max-chunks-per-query</code>. Both are protective limits, and this benchmark raises them (<code>--query.max-samples=1e9</code>, <code>max_fetched_chunks_per_query=20e6</code>) together with a uniform 600s timeout, so the engines decide the outcome instead of the defaults. <strong>All four then complete every window</strong> — and OpenObserve finishes the 3h scan in 27 seconds against Prometheus's 3.3 minutes and Mimir's 4.3 minutes.</p>
 
   <h3>3 · Filtered histogram (regex match)</h3>
 
@@ -718,9 +705,9 @@ selected by the query.</code></pre>
       <tr><th>Window</th><th>Prometheus</th><th>Mimir</th><th>O2 · Parquet</th><th>O2 · Vortex</th></tr>
     </thead>
     <tbody>
-      <tr><td>30m</td><td>650<br>650<br>648</td><td>728<br>731<br>731</td><td>341<br>353<br>347</td><td><strong>152<br>172<br>169</strong></td></tr>
-      <tr><td>1h</td><td>1199<br>1204<br>1201</td><td>2195<br>2189<br>2201</td><td>698<br>699<br>721</td><td><strong>319<br>322<br>330</strong></td></tr>
-      <tr><td>3h</td><td>3178<br>3184<br>3272</td><td>8031<br>8010<br>8008</td><td>2192<br>2213<br>2200</td><td><strong>944<br>915<br>887</strong></td></tr>
+      <tr><td>30m</td><td>568</td><td>633</td><td>688</td><td><strong>229</strong></td></tr>
+      <tr><td>1h</td><td>1,128</td><td>1,004</td><td>1,196</td><td><strong>406</strong></td></tr>
+      <tr><td>3h</td><td>3,403</td><td>4,542</td><td>4,316</td><td><strong>1,472</strong></td></tr>
     </tbody>
   </table>
 
@@ -738,13 +725,13 @@ selected by the query.</code></pre>
       <tr><th>Window</th><th>Prometheus</th><th>Mimir</th><th>O2 · Parquet</th><th>O2 · Vortex</th></tr>
     </thead>
     <tbody>
-      <tr><td>30m</td><td>651<br>646<br>651</td><td>804<br>729<br>724</td><td>352<br>354<br>343</td><td><strong>154<br>164<br>175</strong></td></tr>
-      <tr><td>1h</td><td>1188<br>1187<br>1169</td><td>2187<br>2208<br>2234</td><td>744<br>713<br>713</td><td><strong>328<br>317<br>325</strong></td></tr>
-      <tr><td>3h</td><td>3251<br>3141<br>3159</td><td>7993<br>8016<br>8085</td><td>2202<br>2197<br>2204</td><td><strong>937<br>939<br>956</strong></td></tr>
+      <tr><td>30m</td><td>595</td><td>634</td><td>700</td><td><strong>234</strong></td></tr>
+      <tr><td>1h</td><td>1,214</td><td>1,004</td><td>1,195</td><td><strong>412</strong></td></tr>
+      <tr><td>3h</td><td>3,421</td><td>4,543</td><td>4,305</td><td><strong>1,458</strong></td></tr>
     </tbody>
   </table>
 
-  <p>The two filter styles behave almost identically: <strong>regex and equality matching cost essentially the same</strong>, across all four systems — the filter type isn't the variable, scan volume is. Ranking the 3-hour medians: <strong>Vortex 915ms &lt; Parquet 2,200ms &lt; Prometheus 3,184ms &lt; Mimir 8,010ms</strong>.</p>
+  <p>The two filter styles behave almost identically: <strong>regex and equality matching cost essentially the same</strong>, across all four systems — the filter type isn't the variable, scan volume is. Ranking the 3-hour medians: <strong>Vortex 1,472ms &lt; Prometheus 3,403ms &lt; Parquet 4,316ms &lt; Mimir 4,542ms</strong>. Note the order: with a selective filter, Parquet falls behind Prometheus while Vortex stays well ahead of both.</p>
 
   <figure>
     <svg width="100%" viewBox="0 0 692 274" xmlns="http://www.w3.org/2000/svg" role="img">
@@ -753,74 +740,74 @@ selected by the query.</code></pre>
       <line x1="0" y1="27" x2="328" y2="27" stroke="#e0d9c8" stroke-width="1"/>
       <text x="100" y="48" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="108" y="36" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="36" width="67.5" height="16" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="284" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">3450</text>
+      <rect x="108" y="36" width="134.1" height="16" rx="2" fill="#c14920" opacity="0.92"/>
+      <text x="284" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">7167</text>
       <text x="100" y="72" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
       <rect x="108" y="60" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="108" y="60" width="170.0" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="284" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">8700</text>
+      <text x="284" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">9083</text>
       <text x="100" y="96" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Parquet</text>
       <rect x="108" y="84" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="84" width="8.0" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="284" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">409</text>
+      <rect x="108" y="84" width="12.7" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="284" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">676</text>
       <text x="100" y="120" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
       <rect x="108" y="108" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="108" width="8.5" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="284" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">435</text>
-      <text x="352" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Histogram, regex filter · 3h (median)</text>
+      <rect x="108" y="108" width="12.7" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="284" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">678</text>
+      <text x="352" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Filtered histogram, regex · 3h (median)</text>
       <line x1="352" y1="27" x2="680" y2="27" stroke="#e0d9c8" stroke-width="1"/>
       <text x="452" y="48" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="460" y="36" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="36" width="67.7" height="16" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="636" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">3184</text>
+      <rect x="460" y="36" width="127.4" height="16" rx="2" fill="#c14920" opacity="0.92"/>
+      <text x="636" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">3403</text>
       <text x="452" y="72" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
       <rect x="460" y="60" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="460" y="60" width="170.0" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="636" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">8010</text>
+      <text x="636" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">4542</text>
       <text x="452" y="96" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Parquet</text>
       <rect x="460" y="84" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="84" width="46.8" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="636" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2200</text>
+      <rect x="460" y="84" width="161.5" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="636" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">4316</text>
       <text x="452" y="120" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
       <rect x="460" y="108" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="108" width="19.4" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="636" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">915</text>
-      <text x="0" y="151" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Histogram, equality filter · 3h (median)</text>
+      <rect x="460" y="108" width="55.1" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="636" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1472</text>
+      <text x="0" y="151" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Filtered histogram, equality · 3h (median)</text>
       <line x1="0" y1="159" x2="328" y2="159" stroke="#e0d9c8" stroke-width="1"/>
       <text x="100" y="180" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="108" y="168" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="168" width="67.0" height="16" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="284" y="180" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">3159</text>
+      <rect x="108" y="168" width="128.0" height="16" rx="2" fill="#c14920" opacity="0.92"/>
+      <text x="284" y="180" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">3421</text>
       <text x="100" y="204" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
       <rect x="108" y="192" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="108" y="192" width="170.0" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="284" y="204" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">8016</text>
+      <text x="284" y="204" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">4543</text>
       <text x="100" y="228" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Parquet</text>
       <rect x="108" y="216" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="216" width="46.8" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="284" y="228" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2202</text>
+      <rect x="108" y="216" width="161.1" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="284" y="228" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">4305</text>
       <text x="100" y="252" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
       <rect x="108" y="240" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="240" width="19.9" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="284" y="252" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">939</text>
+      <rect x="108" y="240" width="54.6" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="284" y="252" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1458</text>
       <text x="352" y="151" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Unfiltered histogram · 1h (median)</text>
       <line x1="352" y1="159" x2="680" y2="159" stroke="#e0d9c8" stroke-width="1"/>
       <text x="452" y="180" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="460" y="168" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="168" width="170.0" height="16" rx="2" fill="url(#errstripe3)" opacity="0.92"/>
-      <text x="636" y="180" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">error</text>
+      <rect x="460" y="168" width="170.0" height="16" rx="2" fill="#c14920" opacity="0.92"/>
+      <text x="636" y="180" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">66.6s</text>
       <text x="452" y="204" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
       <rect x="460" y="192" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="192" width="170.0" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="636" y="204" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">67011</text>
+      <rect x="460" y="192" width="143.3" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
+      <text x="636" y="204" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">56.2s</text>
       <text x="452" y="228" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Parquet</text>
       <rect x="460" y="216" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="216" width="10.5" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="636" y="228" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">4176</text>
+      <rect x="460" y="216" width="21.4" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="636" y="228" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">8.4s</text>
       <text x="452" y="252" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
       <rect x="460" y="240" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="240" width="12.2" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="636" y="252" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">4798</text>
+      <rect x="460" y="240" width="22.9" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="636" y="252" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">9.0s</text>
     </svg>
     <figcaption>Figure 4 · All four query types (unit: ms). Linear scale, each group normalized to its max; striped bars indicate errors.</figcaption>
   </figure>
@@ -829,7 +816,7 @@ selected by the query.</code></pre>
 
   <p>The only difference between the two OpenObserve deployments is <code>ZO_FILE_FORMAT</code>. The results split cleanly by query type:</p>
 
-  <p><strong>irate and unfiltered histogram: a tie.</strong> When queries must scan all the data, the two formats trade places within 5–10% — no decisive winner. Disk usage ties as well (95GB each).</p>
+  <p><strong>irate and unfiltered histogram: a tie.</strong> When queries must scan all the data, the two formats trade places within 5–10% — no decisive winner. Disk usage ties as well (15.5 and 15.1GB).</p>
 
   <p><strong>Filtered histogram: Vortex is consistently 2× faster or more.</strong></p>
 
@@ -840,56 +827,56 @@ selected by the query.</code></pre>
       <line x1="0" y1="27" x2="328" y2="27" stroke="#e0d9c8" stroke-width="1"/>
       <text x="100" y="48" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">30m · Parquet</text>
       <rect x="108" y="36" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="36" width="26.9" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="284" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">347</text>
+      <rect x="108" y="36" width="27.1" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="284" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">688</text>
       <text x="100" y="72" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">30m · Vortex</text>
       <rect x="108" y="60" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="60" width="13.1" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="284" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">169</text>
+      <rect x="108" y="60" width="9.0" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="284" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">229</text>
       <text x="100" y="96" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">1h · Parquet</text>
       <rect x="108" y="84" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="84" width="54.1" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="284" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">699</text>
+      <rect x="108" y="84" width="47.1" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="284" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1196</text>
       <text x="100" y="120" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">1h · Vortex</text>
       <rect x="108" y="108" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="108" width="24.8" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="284" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">322</text>
+      <rect x="108" y="108" width="16.0" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="284" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">406</text>
       <text x="100" y="144" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">3h · Parquet</text>
       <rect x="108" y="132" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="108" y="132" width="170.0" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="284" y="144" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2200</text>
+      <text x="284" y="144" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">4316</text>
       <text x="100" y="168" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">3h · Vortex</text>
       <rect x="108" y="156" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="156" width="70.7" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="284" y="168" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">915</text>
+      <rect x="108" y="156" width="58.0" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="284" y="168" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1472</text>
       <text x="352" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Equality filter (median, ms)</text>
       <line x1="352" y1="27" x2="680" y2="27" stroke="#e0d9c8" stroke-width="1"/>
       <text x="452" y="48" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">30m · Parquet</text>
       <rect x="460" y="36" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="36" width="27.2" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="636" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">352</text>
+      <rect x="460" y="36" width="27.6" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="636" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">700</text>
       <text x="452" y="72" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">30m · Vortex</text>
       <rect x="460" y="60" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="60" width="12.6" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="636" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">164</text>
+      <rect x="460" y="60" width="9.2" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="636" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">234</text>
       <text x="452" y="96" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">1h · Parquet</text>
       <rect x="460" y="84" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="84" width="55.1" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="636" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">713</text>
+      <rect x="460" y="84" width="47.2" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="636" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1195</text>
       <text x="452" y="120" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">1h · Vortex</text>
       <rect x="460" y="108" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="108" width="25.2" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="636" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">325</text>
+      <rect x="460" y="108" width="16.3" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="636" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">412</text>
       <text x="452" y="144" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">3h · Parquet</text>
       <rect x="460" y="132" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="460" y="132" width="170.0" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="636" y="144" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2202</text>
+      <text x="636" y="144" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">4305</text>
       <text x="452" y="168" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">3h · Vortex</text>
       <rect x="460" y="156" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="156" width="72.4" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="636" y="168" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">939</text>
+      <rect x="460" y="156" width="57.6" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="636" y="168" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1458</text>
     </svg>
-    <figcaption>Figure 5 · Filtered histogram, Parquet vs Vortex. Vortex is 2.1×–2.4× faster across all three windows.</figcaption>
+    <figcaption>Figure 5 · Filtered histogram, Parquet vs Vortex. Vortex is ~2.9×–3.0× faster across all three windows.</figcaption>
   </figure>
 
   <p>The pattern is remarkably stable: 2.1× at 30m, 2.2× at 1h, 2.4× at 3h — <strong>the longer the window, the bigger Vortex's edge</strong>.</p>
@@ -900,7 +887,7 @@ selected by the query.</code></pre>
 
   <p>Beyond the headline numbers, one phenomenon is worth recording.</p>
 
-  <p><strong>The cold/hot gap.</strong> OpenObserve's histogram queries over the 3-hour window <strong>all take around 30 seconds on the first cold run</strong> (data not in the OS page cache), versus 2 seconds hot; dropping the page cache with <code>echo 3 &gt; /proc/sys/vm/drop_caches</code> and re-running brings it right back to 30 seconds.</p>
+  <p><strong>The cold/hot gap is a memory-capacity effect, not a storage one.</strong> Under a 14G envelope the 3h filtered histogram measured <strong>78.9s cold against 4.8s warm — 16.8×</strong>, because OpenObserve's 15.5GB dataset did not fit in the ~11GB of page cache available while Prometheus's 4.5GB did. That asymmetry silently flattered whichever system fit in RAM. At 28G every dataset fits and the gap disappears: with caches dropped on all four nodes, every cold first-touch request lands within 1.0×–1.2× of its warm median. If you shrink the memory envelope, re-check that the largest dataset still fits before trusting any warm number.</p>
 
   <p><strong>The bottleneck is disk throughput — the arithmetic makes it obvious.</strong> The query engine log shows:</p>
 
@@ -915,13 +902,13 @@ scan_size 137424238093, compressed_size 3627283262, took: 3 ms</code></pre>
 
   <h2>The bottom line</h2>
 
-  <p>Put the same 7.1 billion samples and ~1 million active series in front of four systems, and the results condense to four sentences:</p>
+  <p>Put the same ~1.2 billion samples and ~1.09 million bucket series in front of four systems, and the results condense to four sentences:</p>
 
   <ul>
-    <li><strong>Ingestion memory:</strong> OpenObserve at 0.9GB — half of Prometheus, a third of Mimir; the trade-off is ~0.4–0.6 more CPU cores and larger disk usage (95GB, typically on object storage)</li>
-    <li><strong>Everyday queries:</strong> on irate, OpenObserve is ~8× faster than Prometheus and ~21× faster than Mimir; on filtered histograms, 1.4×–8.8× faster</li>
-    <li><strong>The high-cardinality limit:</strong> on the million-series unfiltered histogram, Prometheus errors on every window, Mimir errors at 3h — only OpenObserve returns results on all windows</li>
-    <li><strong>The format race:</strong> Vortex is consistently 2×+ faster than Parquet on filtered queries and ties on full scans — for dashboard-style filtered workloads, Vortex is the better default</li>
+    <li><strong>Ingestion memory:</strong> OpenObserve stays flat at 1.2–1.8GB — a third of Prometheus, a quarter of Mimir, both of which were still climbing after three hours. The trade-off is ~2× the CPU and ~3.4× the disk (typically on object storage)</li>
+    <li><strong>Everyday queries:</strong> on irate at 3h, OpenObserve is ~10.6× faster than Prometheus and ~13.4× faster than Mimir; on filtered histograms Vortex leads by 2.3× over Prometheus, while Parquet trails it</li>
+    <li><strong>The high-cardinality limit:</strong> on the million-series unfiltered histogram, stock limits make Prometheus and Mimir refuse the query outright. Raised to match, all four complete — OpenObserve in 27s at 3h against 3.3 and 4.3 minutes</li>
+    <li><strong>The format race:</strong> Vortex is ~2.9× faster than Parquet on filtered queries and ties on full scans — for dashboard-style filtered workloads, Vortex is the better default</li>
   </ul>
 
   <div class="pull">
@@ -933,9 +920,9 @@ scan_size 137424238093, compressed_size 3627283262, took: 3 ms</code></pre>
     <ul>
       <li>Versions: Prometheus <code>v3.6.0</code>, Mimir <code>grafana/mimir:latest</code>, OpenObserve <code>0.92.0-rc3</code>; the two OpenObserve deployments differ only in <code>ZO_FILE_FORMAT</code> (parquet/vortex)</li>
       <li>Mimir's ingestion limits (ingestion_rate, max_global_series_per_user, etc.) were raised so writes were never throttled by defaults; query-side chunk limits were left at default</li>
-      <li>One dedicated EC2 c7g.2xlarge per system: 7 CPU / 14GB RAM / gp3 500GB, all single-node deployments</li>
+      <li>One dedicated EC2 m7g.2xlarge per system: 7 CPU / 28G container limit / gp3 500Gi, all single-node deployments</li>
       <li>All query caches disabled; OpenObserve's Parquet filter pushdown disabled (<code>ZO_FEATURE_PUSHDOWN_FILTER_ENABLED=false</code> — on by default, but ~20% slower in our metrics tests)</li>
-      <li>Data generated by fake-webserver on 24 pods (~45k series each, ~1.09M total), shipped through a standalone OTel Collector writing to all systems simultaneously; 7.1B samples total</li>
+      <li>Data generated by fake-webserver on 24 pods (~45k bucket series each, ~1.09M total), shipped through a standalone OTel Collector writing to all systems simultaneously; ~1.2B samples across the <code>codelab_api_*</code> metrics</li>
       <li>Query range 2026-08-06 00:00–03:00 (CST); every query run 3 times — tables keep all raw values, charts use medians</li>
       <li>Prometheus / Mimir errors stem from default protective limits; raising them may allow completion at the cost of higher per-query memory risk</li>
       <li>Multipliers are rounded — the point is the order of magnitude, not the decimals</li>

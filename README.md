@@ -11,14 +11,14 @@ byte-identical data and the same PromQL can be run against all of them.
 
 ```
                                  ┌──────────────────────────────┐
-                                 │  Prometheus  v3.6.0          │  7C / 14G / 500Gi
+                                 │  Prometheus  v3.6.0          │  7C / 28G / 500Gi
                                  ├──────────────────────────────┤
-  fake-webserver  ──scrape──►    │  Mimir       (single binary) │  7C / 14G / 500Gi
+  fake-webserver  ──scrape──►    │  Mimir       (single binary) │  7C / 28G / 500Gi
   24 pods, 15s     OTel      ──► ├──────────────────────────────┤
-  ~1.08M series    Collector     │  OpenObserve ZO_FILE_FORMAT= │  7C / 14G / 500Gi
+  ~1.08M series    Collector     │  OpenObserve ZO_FILE_FORMAT= │  7C / 28G / 500Gi
                    (gateway)     │              parquet         │
                                  ├──────────────────────────────┤
-                                 │  OpenObserve ZO_FILE_FORMAT= │  7C / 14G / 500Gi
+                                 │  OpenObserve ZO_FILE_FORMAT= │  7C / 28G / 500Gi
                                  │              vortex          │
                                  └──────────────────────────────┘
 ```
@@ -29,35 +29,37 @@ nothing is protocol-specific.
 
 ## Results this reproduces
 
-The published numbers are in [RESULTS.md](RESULTS.md). The headline — 3-hour
-filtered `histogram_quantile`, median of 3 runs:
+Measured numbers are in [RESULTS.md](RESULTS.md). The headline — 3-hour
+filtered `histogram_quantile`, median of the recorded runs:
 
 | System | Latency (ms) |
 | --- | --- |
-| Mimir | 8,010 |
-| Prometheus | 3,184 |
-| OpenObserve · Parquet | 2,200 |
-| **OpenObserve · Vortex** | **915** |
+| Mimir | 4,542 |
+| OpenObserve · Parquet | 4,316 |
+| Prometheus | 3,403 |
+| **OpenObserve · Vortex** | **1,472** |
 
 And the result that is not about milliseconds: on the **unfiltered** histogram
-over ~1.08M series, Prometheus errors on every window and Mimir errors at 3h.
-Only the two OpenObserve deployments return an answer on all three windows.
+over ~1.08M series, Prometheus and Mimir *refuse* the query at stock limits.
+Given the same allowances and the same 600s timeout, all four finish every
+window — OpenObserve in 27s at 3h, against Prometheus's 3.3 and Mimir's 4.3
+minutes.
 
 ## What you need
 
 - A Kubernetes cluster with **four dedicated nodes** for the systems under test,
   plus ordinary capacity for the load generator (24 pods × 128m/64Mi = 3.07 CPU
   and 1.5GiB of requests) and the collector (1–4 CPU, up to 6Gi).
-  The published run used `c7g.2xlarge` (8 vCPU / 16GB, Graviton/arm64) on EKS.
+  Uses `m7g.2xlarge` (8 vCPU / 32GB, Graviton/arm64) on EKS.
 - A `gp3` (or equivalent) StorageClass. Each system gets a **500Gi** PVC.
 - `kubectl`, `helm`, `curl`, `python3`.
-- **Time.** The interesting numbers need hours of ingestion before there is
-  enough data to query over a 3-hour window. The published run had been
-  ingesting for roughly 30 hours (7.1 billion samples) when it was measured.
+- **Time.** You need enough ingestion to cover the widest query window, at full
+  cardinality. Total ingestion *duration* beyond that does not affect query
+  latency — a 3h query only ever scans 3h of data — but series count does.
 
 ### Node setup
 
-Each system must have a node to itself — that is the whole point of the 7C/14G
+Each system must have a node to itself — that is the whole point of the 7C/28G
 Guaranteed-QoS pod sizing. Taint a four-node group so nothing else lands there:
 
 ```bash
@@ -69,7 +71,7 @@ Every system's pod spec carries the matching toleration. On EKS with `eksctl`:
 ```yaml
 managedNodeGroups:
   - name: perf
-    instanceType: c7g.2xlarge
+    instanceType: m7g.2xlarge
     desiredCapacity: 4
     volumeSize: 100          # the OS disk; data lives on the 500Gi PVCs
     taints:
@@ -121,7 +123,8 @@ destroys the ratios — it costs the fastest system the most. See
 [bench/README.md](bench/README.md#measure-from-inside-the-cluster) for the
 measured comparison.
 
-144 requests (4 queries × 3 windows × 4 systems × 3 runs). Results land in
+184 requests: 4 queries × 3 windows × 4 systems × (1 cold + 3 recorded runs),
+less the 3h unfiltered cell which is recorded once. Results land in
 `results/<timestamp>/` as `raw.csv`, `summary.md` and `run-metadata.txt`.
 
 Resource usage is measured separately, during steady-state ingestion:
@@ -140,11 +143,11 @@ running a different benchmark:
 
 | Setting | Value | Reason |
 | --- | --- | --- |
-| Pod resources | 7 CPU / 14G, requests == limits | Guaranteed QoS on a dedicated node: fixed CPU shares, memory never reclaimed |
+| Pod resources | 7 CPU / 28G, requests == limits | Guaranteed QoS on a dedicated node: fixed CPU shares, memory never reclaimed |
 | Disk | 500Gi gp3 per system | Same storage class and size everywhere |
 | Ingest protocol | `prometheusremotewrite` for all four | OTLP for OpenObserve and remote write for the others would compare different parsers |
 | Mimir write limits | `ingestion_rate` 20M, `max_global_series_per_user` 150M | So writes are never throttled by defaults |
-| Mimir query limits | **left at defaults** | `err-mimir-max-chunks-per-query` at 3h is a result, not a misconfiguration |
+| Query limits and timeouts | Raised to match across all four — see [deploy/README.md](deploy/README.md#query-limits) | At defaults, Prometheus and Mimir *refuse* the million-series histogram instead of running it, which measures the limit rather than the engine. 600s timeout everywhere, matching OpenObserve's default |
 | OpenObserve caches | `ZO_RESULT_CACHE_ENABLED=false` | Matches "caches disabled" on the others |
 | OpenObserve pushdown | `ZO_FEATURE_PUSHDOWN_FILTER_ENABLED=false` | On by default, but ~20% *slower* in these metrics tests. Affects parquet only; set identically in both so the A/B stays clean |
 | Parquet vs Vortex | `ZO_FILE_FORMAT` | The **only** difference between the two OpenObserve deployments |
@@ -175,9 +178,12 @@ Stated plainly, because a reproduction you cannot audit is not a reproduction:
   operator's own cluster telemetry to an internal OpenObserve. Those pipelines
   were filtered to exclude `perf-fakeserver` and never touched the systems under
   test, so removing them does not change the measured workload.
-- **Cold-query numbers depend on your disk.** The ~30s cold / ~2s hot gap in the
-  article is gp3 at its default 125 MB/s reading ~3.6GB. On io2 the same query
-  took ~3.5s. Use `bench/drop-caches.sh` to measure your own.
+- **Cold-query numbers depend on whether your data fits in RAM.** At 28G there
+  is no measurable cold/hot gap. At 14G the same query measured 16.8× slower
+  cold, purely because OpenObserve's dataset no longer fit in page cache while
+  Prometheus's did. Check that before comparing anything.
+- **Mimir needs ~3 full passes to reach steady state**, up to 3× slower on the
+  first. The other three are at steady state immediately.
 
 ## Repository layout
 
@@ -194,13 +200,13 @@ bench/
   queries.sh           The four PromQL expressions
   run-in-cluster.sh    Runs the driver from a pod — use this for timings
   run-benchmark.sh     The main driver -> results/<timestamp>/
-  summarize.py         raw.csv -> the article's markdown tables
+  summarize.py         raw.csv -> markdown tables, warm and cold separately
   cardinality.sh       Series counts per system (run this first)
   resources.sh         CPU / memory / disk per system
   drop-caches.sh       Force a cold query
   port-forward.sh      Local ports — for browsing a UI, never for timing
 results/               Your runs land here
-RESULTS.md             The published numbers, for comparison
+RESULTS.md             Measured results
 ```
 
 ## License
