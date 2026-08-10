@@ -217,7 +217,17 @@ untouched. Switching the name back re-attaches the old data, so a finished run
 can be re-queried later without re-ingesting it.
 
 ```bash
-grep -rn 'mnt/k8s-disks/0' */deploy.yaml */values.yaml   # see the current name
+./set-dataset.sh          # show the current name
+./set-dataset.sh run-b    # switch all four, then ./install-all.sh
+```
+
+Each system is pinned to one node by a `perf-system` node label, because
+`hostPath` is node-local: a pod that restarts onto a different perf node finds
+an empty directory and comes up with no data. Label the nodes once, one system
+each, before the first install:
+
+```bash
+kubectl label node <node> perf-system=prometheus    # mimir, o2-parquet, o2-vortex
 ```
 
 What is on the nodes right now:

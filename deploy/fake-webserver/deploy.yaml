@@ -31,11 +31,10 @@ spec:
       # Drop this if your cluster is amd64 -- the image is multi-arch.
       nodeSelector:
         kubernetes.io/arch: arm64
-      tolerations:
-      - key: perf
-        operator: Equal
-        value: "true"
-        effect: NoSchedule
+      # Deliberately NO toleration for the `perf` taint. The four perf nodes
+      # each run one system under test with 7 of their 8 vCPU reserved; a
+      # replica landing there spends its CPU competing with the thing being
+      # measured. Untolerated, the taint keeps the load generator off them.
       containers:
         - name: fake-webserver
           image: openobserve/fake-webserver:v2
