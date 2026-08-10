@@ -3,3 +3,4 @@
 # Commit a run deliberately with `git add -f` if you want to publish it.
 results/*
 !results/.gitkeep
+*.log

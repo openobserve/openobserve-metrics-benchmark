@@ -164,7 +164,7 @@ spec:
       - name: data
         hostPath:
           # Dataset switch -- see deploy/README.md#datasets.
-          path: /mnt/k8s-disks/0/run-a/mimir
+          path: /mnt/k8s-disks/0/run-rehearsal/mimir
           type: DirectoryOrCreate
       dnsPolicy: ClusterFirst
       restartPolicy: Always
