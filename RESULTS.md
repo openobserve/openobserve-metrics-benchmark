@@ -106,13 +106,16 @@ No label filter: `rate` + aggregation over all 1,085,760 series.
 | 3h | 15s | 189,565 | 245,369 | 27,559 | **27,031** |
 | 6h | 30s | 268,419 | 255,386 | **46,645** | 46,833 |
 
-**All four complete every window — but only because the limits were raised.** At
-stock settings Prometheus rejects this query outright with *"query processing
-would load too many samples into memory"* and Mimir with
-*"err-mimir-max-chunks-per-query"*. Both refusals are protective limits, and
-this repo raises them (`--query.max-samples=1e9`,
-`max_fetched_chunks_per_query=20e6`) so the engines decide the outcome rather
-than the defaults.
+**All four complete every window — but only because the limits were raised, on
+all three systems.** At stock settings Prometheus rejects this query outright
+with *"query processing would load too many samples into memory"* and Mimir
+with *"err-mimir-max-chunks-per-query"*; OpenObserve's stock metrics limits
+would have rejected it too. Every one of these is a protective default, and
+this repo raises all of them — `--query.max-samples=1e9`,
+`max_fetched_chunks_per_query=20e6`, `ZO_METRICS_MAX_SERIES_RESPONSE=40000`,
+`ZO_METRICS_MAX_POINTS_PER_SERIES=1e7` — plus a uniform 600s timeout, so the
+engines decide the outcome rather than the defaults. The full list is in
+[deploy/README.md](deploy/README.md#query-limits).
 
 Once they do run it, OpenObserve is **5.8× faster than Prometheus** and 5.5×
 faster than Mimir at 6h — 47 seconds against 4.5 and 4.3 minutes.

@@ -102,9 +102,15 @@ All four now get the same allowances:
 | Mimir | `limits.max_fetched_chunks_per_query` | 20e6 | 2e6 |
 | Mimir | `querier.timeout` | 600s | 2m |
 | Mimir | `server.http_server_write_timeout` | 600s | 2m |
-| OpenObserve | (default) | 600s | 600s |
+| OpenObserve | `ZO_METRICS_MAX_SERIES_RESPONSE` | 40000 | lower |
+| OpenObserve | `ZO_METRICS_MAX_POINTS_PER_SERIES` | 10000000 | lower |
+| OpenObserve | query timeout | 600s | 600s (unchanged) |
 
-600s is OpenObserve's default; the others are matched to it.
+**All three needed raising, not just the two TSDBs.** OpenObserve's stock
+metrics limits would have rejected the million-series histogram before its
+engine ran, exactly as Prometheus's and Mimir's did. 600s is OpenObserve's
+default timeout, so it is the number the other two were matched to — that one
+is the only value here that was not changed.
 
 Two Mimir gotchas:
 
