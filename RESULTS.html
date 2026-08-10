@@ -595,11 +595,9 @@ limits:
 
   <p>Three observations:</p>
 
-  <p><strong>Memory is OpenObserve's clear win.</strong> Sampled every ten minutes across 8h23m of ingestion, Prometheus ran 3.2–4.1GB and Mimir 4.5–5.5GB, both moving in a sawtooth as head blocks fill and compact. Both OpenObserve variants stay <strong>flat at 1.5–2.1GB</strong> — roughly half of Prometheus and a third of Mimir. Once ingestion stops everything collapses: Prometheus to 2.4GB, Mimir to 2.5GB, and both OpenObserve deployments to <strong>under 600MB</strong>; the ingestion-time figures are buffers and WAL, not resident working set.</p>
+  <p><strong>Memory is OpenObserve's clear win.</strong> Sampled every ten minutes across 8h23m of ingestion as <strong>RSS</strong> — the memory the process actually holds, the number <code>top</code> reports in <code>RES</code>, not page cache the kernel is free to reclaim — Prometheus ran 3.2–4.1GB and Mimir 4.5–5.5GB, both moving in a sawtooth as head blocks fill and compact. Both OpenObserve variants stay <strong>flat at 1.5–2.1GB</strong> — roughly half of Prometheus and a third of Mimir. Once ingestion stops everything collapses: Prometheus to 2.4GB, Mimir to 2.5GB, and both OpenObserve deployments to <strong>under 600MB</strong>; the ingestion-time figures are buffers and WAL, not resident working set.</p>
 
   <p><strong>OpenObserve pays for it in CPU.</strong> ~1.6–2.2 cores versus Prometheus's ~1.3–1.9 and Mimir's ~0.7–1.1. The extra cycles go into columnar encoding and compression. At identical ingest throughput, that is the price paid for query performance and low memory.</p>
-
-  <p>Memory here is <strong>RSS</strong> — the memory the process actually holds, the number <code>top</code> shows in its <code>RES</code> column — not page cache the kernel is free to reclaim.</p>
 
   <p><strong>Disk usage is largest for OpenObserve, and it deserves context.</strong> 28GB versus Prometheus's 11GB and Mimir's 18GB, over 8h23m of ingestion. A general-purpose columnar format keeps full detail rather than applying TSDB-style XOR/delta compression tuned specifically for time series; in exchange, the same data simultaneously serves SQL, PromQL, and arbitrary dimensional analysis, and maps naturally onto object storage, where it typically lives in production at a very different unit cost. Parquet and Vortex tie, at 28 and 27GB. All four figures were taken <strong>14.8 hours after the last write</strong>, once every system's compaction and cleanup had finished.</p>
 

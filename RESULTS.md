@@ -290,9 +290,11 @@ Sampled every 10 minutes across the 8h23m ingestion, at the 28 GB limit.
 > compaction and cleanup had finished. Read too early it is a different number
 > entirely — see [When disk usage settles](#when-disk-usage-settles).
 
-**Memory is where the systems differ most, and it is not close.** OpenObserve
-holds 1.5–2.1 GB and stays flat for the entire eight hours. Prometheus and Mimir
-run 2–3× that and move in a sawtooth as head blocks fill and compact.
+**Memory is where the systems differ most, and it is not close.** Measured as
+**RSS** — the memory the process actually holds, the number `top` reports in
+`RES`, not page cache the kernel is free to reclaim — OpenObserve holds
+1.5–2.1 GB and stays flat for the entire eight hours. Prometheus and Mimir run
+2–3× that and move in a sawtooth as head blocks fill and compact.
 
 **CPU is the trade**: OpenObserve runs ~1.6–2.2 cores against Prometheus's
 ~1.3–1.9 and Mimir's ~0.7–1.1.
@@ -300,10 +302,6 @@ run 2–3× that and move in a sawtooth as head blocks fill and compact.
 Once ingestion stops, everything collapses: Prometheus to 2.4 GB, Mimir to
 2.5 GB, and both OpenObserve deployments to **under 600 MB**. The ingestion-time
 figures are buffers and WAL, not resident working set.
-
-> Memory here is **RSS** — the memory the process actually holds, the number
-> `top` shows in its `RES` column — not page cache the kernel is free to
-> reclaim.
 
 ## When disk usage settles
 
