@@ -48,6 +48,15 @@ spec:
         app.kubernetes.io/instance: prometheus
         app.kubernetes.io/name: prometheus-standalone
     spec:
+      # Pin to the node holding this system's data. The dataset lives on that
+      # node's instance store, and hostPath is node-local: without this, a
+      # restart can land the pod on a different perf node, where the hostPath
+      # is created empty and the system comes up with no data. It looks like
+      # data loss and is not -- the dataset is still on the original node.
+      # Label the nodes once, matching one system each:
+      #   kubectl label node <node> perf-system=prometheus
+      nodeSelector:
+        perf-system: prometheus
       tolerations:
       - key: perf
         operator: Equal

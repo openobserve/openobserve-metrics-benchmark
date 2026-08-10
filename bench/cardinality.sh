@@ -6,6 +6,14 @@
 #
 #   ./cardinality.sh          # series counts for the metrics under test
 #   ./cardinality.sh paths    # list the `path` label values in use
+#
+# The counts are taken at END_TIME (default: 5 minutes ago), not at "now". On a
+# frozen dataset -- ingestion stopped, which is when the benchmark actually runs
+# -- an instant query at "now" falls outside every lookback window and every
+# system correctly answers zero. Point END_TIME inside the data:
+#
+#   END_TIME=1786276800 ./cardinality.sh
+#   END_TIME=2026-08-09T20:00:00+08:00 ./cardinality.sh
 set -uo pipefail
 
 cd "$(dirname "$0")"
@@ -13,6 +21,8 @@ cd "$(dirname "$0")"
 source ./config.sh
 
 command -v python3 >/dev/null || die "python3 not found"
+
+AT_TS="$(resolve_end_time)"
 
 # Instant query against one system; prints the scalar result or an error.
 q() {
@@ -22,6 +32,7 @@ q() {
   # ${arr[@]+"${arr[@]}"} expands a possibly-empty array safely under `set -u`.
   curl -sS --max-time "${CURL_TIMEOUT}" ${auth_args[@]+"${auth_args[@]}"} \
     --data-urlencode "query=${promql}" \
+    --data-urlencode "time=${AT_TS}" \
     "${base}/api/v1/query" 2>/dev/null \
   | python3 -c '
 import json,sys
@@ -64,6 +75,8 @@ METRICS=(
   "codelab_api_requests_total"
 )
 
+echo "==> counts as of ${AT_TS} ($(python3 -c "import datetime,sys;print(datetime.datetime.fromtimestamp(int(sys.argv[1])).isoformat())" "${AT_TS}") local)"
+echo
 printf '%-14s %s\n' "system" "series count"
 for metric in "${METRICS[@]}"; do
   echo

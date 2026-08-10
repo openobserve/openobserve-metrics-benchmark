@@ -108,6 +108,10 @@ spec:
         app.kubernetes.io/instance: mimir
         app.kubernetes.io/name: mimir-standalone
     spec:
+      # Pin to the node holding this system's data -- see the same block in
+      # prometheus/deploy.yaml for why.
+      nodeSelector:
+        perf-system: mimir
       tolerations:
       - key: perf
         operator: Equal
