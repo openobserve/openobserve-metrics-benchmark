@@ -410,35 +410,35 @@
 
   <p>The contenders are four deployments with fully aligned configurations: <strong>Prometheus, Grafana Mimir, OpenObserve (Parquet format), and OpenObserve (Vortex format)</strong>. Each gets a dedicated EC2 m7gd.2xlarge with its data on the node's <strong>local NVMe</strong>, query caches disabled, and identical query limits and timeouts — so that neither the disk nor a protective default decides the outcome.</p>
 
-  <!-- Hero chart: 3h filtered histogram -->
+  <!-- Hero chart: 6h unfiltered histogram, the million-series query -->
   <figure>
-    <svg width="100%" viewBox="0 0 680 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="6-hour filtered histogram_quantile query, latency across four systems">
-      <text x="40" y="34" font-family="sans-serif" font-size="15" font-weight="600" fill="#1a1a17">histogram_quantile + label filter, 6-hour window (median)</text>
-      <text x="40" y="56" font-family="sans-serif" font-size="12" fill="#8a8a82">Same data · same PromQL · frozen dataset · local NVMe · 28 GB memory limit · unit: ms</text>
+    <svg width="100%" viewBox="0 0 680 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Six-hour unfiltered histogram_quantile query over 1.09 million series, latency across four systems">
+      <text x="40" y="34" font-family="sans-serif" font-size="15" font-weight="600" fill="#1a1a17">histogram_quantile over 1,085,760 series, 6-hour window (median)</text>
+      <text x="40" y="56" font-family="sans-serif" font-size="12" fill="#8a8a82">Same data · same PromQL · frozen dataset · local NVMe · 28 GB memory limit</text>
 
-      <rect x="200" y="88" width="440" height="44" rx="3" fill="#185fa5" opacity="0.92"/>
-      <text x="192" y="116" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">O2 · Parquet</text>
-      <text x="632" y="116" text-anchor="end" font-family="sans-serif" font-size="15" font-weight="700" fill="#ffffff">8,199</text>
+      <rect x="200" y="88" width="440" height="44" rx="3" fill="#c14920" opacity="0.92"/>
+      <text x="192" y="116" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">Prometheus</text>
+      <text x="632" y="116" text-anchor="end" font-family="sans-serif" font-size="15" font-weight="700" fill="#ffffff">4m 28s</text>
 
-      <rect x="200" y="148" width="257" height="44" rx="3" fill="#c14920" opacity="0.92"/>
-      <text x="192" y="176" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">Prometheus</text>
-      <text x="467" y="176" font-family="sans-serif" font-size="15" font-weight="700" fill="#c14920">4,798</text>
+      <rect x="200" y="148" width="419" height="44" rx="3" fill="#ba7517" opacity="0.92"/>
+      <text x="192" y="176" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">Mimir</text>
+      <text x="611" y="176" text-anchor="end" font-family="sans-serif" font-size="15" font-weight="700" fill="#ffffff">4m 15s</text>
 
-      <rect x="200" y="208" width="237" height="44" rx="3" fill="#ba7517" opacity="0.92"/>
-      <text x="192" y="236" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">Mimir</text>
-      <text x="447" y="236" font-family="sans-serif" font-size="15" font-weight="700" fill="#ba7517">4,416</text>
+      <rect x="200" y="208" width="78" height="44" rx="3" fill="#185fa5" opacity="0.92"/>
+      <text x="192" y="236" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">O2 · Parquet</text>
+      <text x="288" y="236" font-family="sans-serif" font-size="15" font-weight="700" fill="#185fa5">47.8s</text>
 
-      <rect x="200" y="268" width="137" height="44" rx="3" fill="#0f6e56"/>
+      <rect x="200" y="268" width="73" height="44" rx="3" fill="#0f6e56"/>
       <text x="192" y="296" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">O2 · Vortex</text>
-      <text x="347" y="296" font-family="sans-serif" font-size="15" font-weight="700" fill="#0f6e56">2,549</text>
+      <text x="283" y="296" font-family="sans-serif" font-size="15" font-weight="700" fill="#0f6e56">44.4s</text>
 
       <line x1="200" y1="330" x2="640" y2="330" stroke="#c8c1ad" stroke-width="1"/>
 
-      <rect x="435" y="262" width="205" height="52" rx="6" fill="#0f6e56"/>
-      <text x="537" y="285" text-anchor="middle" font-family="sans-serif" font-size="18" font-weight="700" fill="#ffffff">Vortex ≈ 3.2×</text>
-      <text x="537" y="305" text-anchor="middle" font-family="sans-serif" font-size="10.5" fill="#d4ebe2">faster than Parquet · 1.9× vs Prometheus</text>
+      <rect x="380" y="262" width="260" height="52" rx="6" fill="#0f6e56"/>
+      <text x="510" y="285" text-anchor="middle" font-family="sans-serif" font-size="18" font-weight="700" fill="#ffffff">6× faster — and it runs</text>
+      <text x="510" y="305" text-anchor="middle" font-family="sans-serif" font-size="10.5" fill="#d4ebe2">at stock limits all three refuse this query outright</text>
     </svg>
-    <figcaption>Figure 1 · 6-hour filtered histogram query, 28 GB memory limit. Bar lengths to real scale.</figcaption>
+    <figcaption>Figure 1 · The million-series histogram over 6 hours, 28 GB memory limit. Bar lengths to real scale.</figcaption>
   </figure>
 
   <h2>The setup</h2>
