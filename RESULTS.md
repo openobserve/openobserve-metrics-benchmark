@@ -73,9 +73,17 @@ biggest lever on absolute latency here.
 | --- | --- | --- |
 | `codelab_api_request_duration_seconds_bucket` | 1,085,760 | the histogram queries |
 | `codelab_api_request_duration_seconds_count` | 41,760 | the irate query |
+| `codelab_api_request_duration_seconds_sum` | 41,760 | |
+| `codelab_api_requests_total` | 41,760 | |
+| `codelab_api_request_errors_total` | 2,880 | |
+| `codelab_api_http_requests_in_progress` | 360 | |
+| **total** | **1,214,280** | |
 
 Verified identical on all four systems inside the query window. The bucket count
 is exactly 26× the `_count` count: 25 explicit buckets plus `+Inf`.
+
+Ingestion delivers **44.3M samples per 10 minutes**, or **~2.2 billion** across
+the 8h23m run.
 
 The 6-hour window holds **361 of 361 expected sample points with no gaps**, at an
 average cardinality of 41,759 — 100.00% of full.
