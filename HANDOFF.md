@@ -1,14 +1,14 @@
-# Where things stand — 2026-08-10 12:30 CST
+# Where things stand — 2026-08-10 14:10 CST
 
 Working notes, not part of the published benchmark. Delete when the churn
 experiment is finished and its findings are folded into RESULTS.
 
-## Done
+## Published results are final
 
-Everything through `1907864` is committed and the working tree is clean.
-`RESULTS.md`, `RESULTS.html` and `README.md` all carry the final numbers:
+`RESULTS.md`, `RESULTS.html` and `README.md` carry the measured numbers:
 Prometheus/Mimir from the 2026-08-09 rounds, OpenObserve from the v0.92.0
-re-runs, disk settled at stop+14.8h.
+re-runs, disk settled at stop+14.8h, sample count measured (2.23B) rather
+than derived.
 
 | Result | Directory | Systems |
 | --- | --- | --- |
@@ -19,47 +19,65 @@ re-runs, disk settled at stop+14.8h.
 
 `results/` is gitignored; the directories are local only.
 
-Branch `in-cluster-benchmarking`, 14 commits, **not merged to main**.
+Branch `in-cluster-benchmarking`, **not merged to main**.
 
-## Cluster state
+## Datasets on the instance store
 
-- Four `m7gd.2xlarge`, one system each, tainted `perf=true:NoSchedule`
-- Data on local NVMe at `/mnt/k8s-disks/0/<system>` — **still the old flat
-  layout**, the deploy files now say `/mnt/k8s-disks/0/run-a/<system>`
-- OpenObserve is at **14 GB** (left from the last round); Prometheus and Mimir
-  are at 28 GB
-- `fake-webserver` scaled to 0; the dataset is frozen
-- `bench/bench` runner pod is up; `mount-nvme` DaemonSet is up
+Each node holds several datasets; only one is mounted at a time. Switch with
+`deploy/set-dataset.sh <name>` then `deploy/install-all.sh`.
 
-## Next: the churn experiment
+| Dataset | What it is |
+| --- | --- |
+| `run-a` | the published dataset, 24 replicas, 8h23m, frozen |
+| `run-rehearsal` | 30-minute churn rehearsal, disposable |
+| `run-b` | **currently mounted** — the churn experiment |
+
+## Each system is pinned to its node
+
+`hostPath` is node-local and nothing used to tie a StatefulSet to the node
+holding its data. Scaling all four down and up put every one of them on a
+different perf node, where the hostPath was created empty — all four came up
+with no data, which reads exactly like total loss and was not.
+
+Nodes are now labelled `perf-system=<name>` and each deploy file selects on it:
+
+| Node | System |
+| --- | --- |
+| ip-10-1-89-108 | prometheus |
+| ip-10-1-86-16 | mimir |
+| ip-10-1-64-74 | o2-parquet |
+| ip-10-1-89-244 | o2-vortex |
+
+Re-label before any install on a rebuilt cluster, or the pods will not schedule.
+
+## Churn experiment — running now
 
 Testing whether a system pays for the series in the query window or the series
-in its index. Scripts are written and syntax-checked in the scratchpad:
+in its index.
 
-- `churn-run.sh` — 10 replicas, `rollout restart` at t=1h/2h/3h, stop at t=6h.
-  `HOUR=300` runs a 30-minute rehearsal instead of the full six hours.
-- `churn-compare.sh` — needs `START` from `churn-run.log`; measures in-window
-  cardinality and latency for `[0h,3h]` against `[3h,6h]` on all four systems.
+```
+START_UNIX  1786341822    # 2026-08-10 14:03:42 CST
+t=1h,2h,3h  rollout restart -> batches 2, 3, 4
+t=6h        20:03 CST, ingestion stops
++2h settle  ~22:05 CST, run the comparison
+```
 
-Discriminator: `[3h,6h]` holds ~450k series against `[0h,3h]`'s ~1.35M. Cost
-proportional to the window means ~3x faster; cost proportional to the index
-means about equal.
+```bash
+START=1786341822 RUNS=5 PASS_ENV="START" \
+  bench/run-in-cluster.sh --script experiments/churn-compare.sh
+```
 
-Steps before starting it:
+`churn-compare.sh` measures four windows. A `[0h,3h]` holds ~1.35M series
+against B `[3h,6h]`'s ~450k, while both hold roughly the same total samples —
+so A/B ≈ 3× means cost follows series count, and A/B ≈ 1× means it follows
+samples or index size (that pair cannot separate those two). C `[1h,2h]` and D
+`[4h,5h]` are the control: identical in every respect but position, so C/D far
+from 1× means the A/B result cannot be read.
 
-1. Migrate the current data into the new layout — `mv` on the same filesystem,
-   so it is instant even at 28 GB:
-   ```bash
-   kubectl -n kube-system exec ds/mount-nvme -- nsenter -t 1 -m -- sh -c \
-     'mkdir -p /mnt/k8s-disks/0/run-a && for d in prometheus mimir o2-parquet o2-vortex; do
-        [ -d /mnt/k8s-disks/0/$d ] && mv /mnt/k8s-disks/0/$d /mnt/k8s-disks/0/run-a/$d; done'
-   ```
-   Then apply all four deploy files and confirm cardinality is still 1,085,760
-   inside the window (`END_TIME=1786276800`).
-2. Put OpenObserve back to 28 GB so all four match.
-3. Switch the dataset name to `run-b` in all four files, apply, confirm the
-   systems come up empty.
-4. Rehearse with `HOUR=300`, then run for real.
+**What the rehearsal taught:** at `HOUR=300` the numbers were pure noise —
+the o2-vortex control read 4.00× where it must read ~1×, and single runs swung
+77–586 ms. Use `RUNS=5` and wait the full settle. The control is what catches
+this; do not skip it.
 
 ## Open question, unresolved
 
@@ -73,14 +91,19 @@ of the difference is not known.
 
 ## Things learned the hard way
 
+- **A pod restart can move a system to a node with no data.** See above. Check
+  `kubectl -n <ns> get pod -o jsonpath='{.items[0].spec.nodeName}'` before
+  concluding anything about an empty system.
 - **Wait for the process, not just the pod.** A round started 120s after an
   image upgrade read 250 ms where the settled value was 123 ms, and the whole
   round had to be discarded. 300s plus a check that CPU is at zero.
 - **A benchmark run and the disk measurement are on different clocks.** Query
   results are valid immediately; disk is not valid for ~14 hours.
-- **`kubectl exec` on this cluster fails intermittently** with `error: EOF`.
-  Setup steps retry; the launch deliberately does not, because retrying a
-  launch that actually succeeded would put two benchmarks on one CPU.
+- **`kubectl exec` on this cluster fails intermittently** with `error: EOF`,
+  and `kubectl exec -i ... < file` can silently deliver a zero-byte file.
+  Ship files with `tar | kubectl exec -i -- tar x` and check the size.
 - **Do not run `deploy/otel-collector/install.sh` here.** The cluster's
   collector carries six unrelated pipelines and that script replaces the
   release's values wholesale.
+- **The load generator must not tolerate the `perf` taint.** It used to, so
+  replicas could land on a system under test and compete with it for CPU.
