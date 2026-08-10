@@ -1,7 +1,8 @@
 # Where things stand — 2026-08-10 14:10 CST
 
-Working notes, not part of the published benchmark. Delete when the churn
-experiment is finished and deploy is back to the published configuration.
+Working notes, not part of the published benchmark. The churn experiment is
+finished and deploy is back to the published configuration (`run-a`, 28 GB,
+all four pinned, cardinality verified at 1,085,760).
 
 ## Published results are final
 
@@ -28,9 +29,9 @@ Each node holds several datasets; only one is mounted at a time. Switch with
 
 | Dataset | What it is |
 | --- | --- |
-| `run-a` | the published dataset, 24 replicas, 8h23m, frozen |
+| `run-a` | **currently mounted** — the published dataset, 24 replicas, 8h23m, frozen |
 | `run-rehearsal` | 30-minute churn rehearsal, disposable |
-| `run-b` | **currently mounted** — the churn experiment |
+| `run-b` | the churn experiment, kept for re-querying |
 
 ## Each system is pinned to its node
 
@@ -50,50 +51,79 @@ Nodes are now labelled `perf-system=<name>` and each deploy file selects on it:
 
 Re-label before any install on a rebuilt cluster, or the pods will not schedule.
 
-## Churn experiment — running now
+## Churn experiment — done, inconclusive
 
-**Diagnostic only. It does not update RESULTS.** It exists to explain why Mimir
-measured ~2x faster and OpenObserve ~2x slower than the original article: the
-hypothesis is that the original run accumulated ~2M series in the in-memory
-index while the query window held only ~1M. Whatever it finds stays in these
-notes.
+Diagnostic only; it did not change RESULTS. Dataset `run-b` is still on the
+instance store if anyone wants to re-query it.
 
-Testing whether a system pays for the series in the query window or the series
-in its index.
+Ran 2026-08-10, 10 replicas with `rollout restart` at t=1h/2h/3h, stopped at
+t=6h, measured after a 2h settle. `START=1786341822`.
 
-```
-START_UNIX  1786341822    # 2026-08-10 14:03:42 CST
-t=1h,2h,3h  rollout restart -> batches 2, 3, 4
-t=6h        20:03 CST, ingestion stops
-+2h settle  ~22:05 CST, run the comparison
-```
+**The dataset came out as designed.** All four systems agreed exactly on every
+count, and the A/B pair holds total samples constant while varying series 2.5x:
 
-```bash
-START=1786341822 RUNS=5 PASS_ENV="START" \
-  bench/run-in-cluster.sh --script experiments/churn-compare.sh
-```
+| Window | Series | Samples | Width |
+| --- | --- | --- | --- |
+| A `[0h,3h]` | 1,357,200 | 325,001,820 | 3h |
+| B `[3h,6h]` | 542,880 | 325,476,892 | 3h |
+| C `[1h,2h]` | 633,360 | 108,511,468 | 1h |
+| D `[4h,5h]` | 452,400 | 108,576,000 | 1h |
 
-`churn-compare.sh` measures four windows. A `[0h,3h]` holds ~1.35M series
-against B `[3h,6h]`'s ~450k, while both hold roughly the same total samples —
-so A/B ≈ 3× means cost follows series count, and A/B ≈ 1× means it follows
-samples or index size (that pair cannot separate those two). C `[1h,2h]` and D
-`[4h,5h]` are the control: identical in every respect but position, so C/D far
-from 1× means the A/B result cannot be read.
+**Latency, median of 5 warm runs (ms):**
 
-**When it is done, put deploy back to normal:**
+| System | A | B | A/B | C | D | C/D |
+| --- | --- | --- | --- | --- | --- | --- |
+| Prometheus | 1,821 | 1,646 | 1.11x | 672 | 648 | 1.04x |
+| Mimir | 5,617 | 1,531 | **3.67x** | 681 | 569 | 1.20x |
+| O2 · Parquet | 2,176 | 2,657 | 0.82x | 991 | 515 | 1.92x |
+| O2 · Vortex | 773 | 790 | 0.98x | 300 | 179 | 1.68x |
 
-```bash
-deploy/set-dataset.sh run-a && deploy/install-all.sh
-```
+### Why it is inconclusive
 
-`run-a` is the published dataset. Confirm cardinality is 1,085,760 at
-`END_TIME=1786276800` and that `fake-webserver` is at 24 replicas in the deploy
-file (churn-run.sh only scales it at runtime; the file is untouched).
+**The C/D control failed, and not for the reason it was built to catch.** C was
+supposed to hold the same series count as D and differ only in position. It does
+not: C has 633,360 series against D's 452,400, 1.40x more, because `[1h,2h]`
+straddles the rollout boundaries at t=1h and t=2h while `[4h,5h]` sits inside
+batch 4's undivided three-hour span. So C/D never tested position at all — it is
+a second, weaker series test.
 
-**What the rehearsal taught:** at `HOUR=300` the numbers were pure noise —
-the o2-vortex control read 4.00× where it must read ~1×, and single runs swung
-77–586 ms. Use `RUNS=5` and wait the full settle. The control is what catches
-this; do not skip it.
+**The two series tests contradict each other.** A/B (2.50x series) says Mimir
+pays steeply and OpenObserve not at all. C/D (1.40x series) says the opposite:
+OpenObserve pays 1.7-1.9x and Mimir only 1.20x. Both cannot be a clean read of
+"cost vs series count".
+
+The likely reason is that A/B varies two things at once. Holding samples
+constant while varying series count *forces* per-series depth to move
+inversely — A holds ~1h of samples per series, B holds ~3h. C/D holds depth
+equal at 1h. So A/B measures series count confounded with per-series depth, and
+C/D measures series count confounded with batch-boundary structure. Neither
+isolates the variable.
+
+**One observation survives:** Mimir's cost is far more sensitive to how series
+are distributed across a window than the others — 3.67x against 1.11x, 0.82x
+and 0.98x on the same pair. That is a large effect and worth knowing, but this
+experiment cannot say whether the driver is series count, chunk count, or
+per-series depth.
+
+### Does it explain the delta against the original article?
+
+**Partly, and only suggestively.**
+
+- *The Mimir half is consistent.* If the original run's window held more
+  distinct series — plausible, since fake-webserver was rescheduled every few
+  hours there and never restarted here — Mimir would have been markedly slower
+  then. That matches Mimir measuring ~2x faster now.
+- *The OpenObserve half is not explained.* OpenObserve shows no A/B sensitivity
+  at all, so series churn would not have made it slower. Its ~2x slowdown
+  against the original article remains unaccounted for.
+
+### If anyone reruns it
+
+Fix the control first. Make the batches non-overlapping by scaling to 0, waiting
+past the scrape interval, then scaling back up — `rollout restart` overlaps old
+and new pods for ~30-60s, which is what contaminated C. And add a third window
+pair that varies series count at *both* constant samples and constant per-series
+depth, or the confound above returns.
 
 ## Open question, unresolved
 
