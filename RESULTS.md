@@ -31,20 +31,41 @@ questions — *how fast* at 28 GB, and *what still runs at all* at 14 GB.
 | Pushdown | `ZO_FEATURE_PUSHDOWN_FILTER_ENABLED=false` (parquet only; ~20% slower when on) |
 | Measured from | a pod in the cluster, same AZ as all four systems |
 
-### Step is computed, not pinned
+### How the measurement is taken
 
-A fixed step makes the point count grow with the window — 1440 points at 6h —
-which no dashboard would request. Grafana asks for roughly the panel width in
-pixels, so this benchmark uses its rule: `max(15s, range / 1000)` rounded up to
-a tidy interval. The 15s floor is the scrape interval.
+Four choices move the numbers more than any setting in the table above.
+
+**Queries are issued from inside the cluster.** Driving a benchmark through
+`kubectl port-forward` invalidates it. The fastest query here answers in ~100ms;
+forwarding adds far more than that, and not as a constant — the same query
+measured 1,656ms to 2,862ms of pure overhead across repeats. That does not just
+inflate the numbers, it destroys the ratios between systems, which is the only
+thing a comparison is for. Everything here is measured from a pod in the same
+AZ as all four systems, on a node that is not under test.
+
+**Data is on node-local NVMe**, one dedicated `m7gd.2xlarge` per system, so
+storage is not a variable between them.
+
+**Ingestion is stopped first.** All four query a frozen dataset over
+absolutely-pinned windows, so a run repeated later sees the same bytes.
+
+**The step is computed, not pinned.** A fixed step makes the point count grow
+with the window — 1440 points at 6h — which no dashboard would request. Grafana
+asks for roughly the panel width in pixels, so this benchmark uses its rule:
+`max(15s, range / 1000)` rounded up to a tidy interval. The 15s floor is the
+scrape interval.
 
 | Window | Step | Points |
 | --- | --- | --- |
 | 30m / 1h / 3h | 15s | 120 / 240 / 720 |
 | 6h | 30s | 720 |
 
-Only the 6h window widens. Publish your step whichever way you go — it is the
-single biggest lever on absolute latency here.
+Only the 6h window widens. This matters because **Prometheus and Mimir cost
+scales with output points, while OpenObserve's scales with data scanned** — on a
+fixed 3h window, widening the step from 36 to 720 points moved Prometheus
+1.68s→3.92s (2.3×) and Mimir 1.14s→4.11s (3.6×), against OpenObserve's
+3.45s→4.63s (1.34×). Publish your step whichever way you go; it is the single
+biggest lever on absolute latency here.
 
 ### Cardinality
 
@@ -272,15 +293,9 @@ Once ingestion stops, everything collapses: Prometheus to 2.4 GB, Mimir to
 2.5 GB, and both OpenObserve deployments to **under 600 MB**. The ingestion-time
 figures are buffers and WAL, not resident working set.
 
-> **On measuring memory.** These are **RSS** (`k8s.pod.memory.rss`, anonymous
-> pages only). Which metric you pick decides the answer: by RSS, OpenObserve
-> holds 1.5 GB against Prometheus's 4.1 GB; by cgroup `workingSetBytes` it reads
-> ~9.8 GB against ~4.1 GB — the ordering inverts. Working set is RSS *plus
-> active page cache charged to the cgroup*, and a system continuously writing
-> columnar files accumulates a lot of that: cache the kernel reclaims on demand,
-> not memory the process needs. RSS undercounts Prometheus and Mimir slightly,
-> since it excludes their file-backed mmap pages — they still come out well
-> above OpenObserve. Whichever you use, say which.
+> Memory here is **RSS** — the memory the process actually holds, the number
+> `top` shows in its `RES` column — not page cache the kernel is free to
+> reclaim.
 
 ## When disk usage settles
 

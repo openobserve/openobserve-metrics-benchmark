@@ -404,7 +404,7 @@
   <h1>One Dataset, <span class="accent">Four Systems</span> — Benchmarking Prometheus, Mimir, and OpenObserve on Metrics Ingestion and Queries</h1>
 
   <div class="lede">
-    <strong>We pushed the same ~1.2 billion samples through one OTel Collector into four systems simultaneously, stopped ingestion, and ran the exact same PromQL against each over an identical frozen window.</strong><br><br>
+    <strong>We pushed the same ~2.4 billion samples through one OTel Collector into four systems simultaneously, stopped ingestion, and ran the exact same PromQL against each over an identical frozen window.</strong><br><br>
     Then we ran the whole thing twice, changing only the memory limit — 28 GB, then 14 GB — because those turn out to answer different questions.
   </div>
 
@@ -449,7 +449,10 @@
     <li><strong>Hardware:</strong> one dedicated EC2 <code>m7gd.2xlarge</code> per system, 7 CPU, 474 GB local NVMe; container memory limit 28 GB in round 1 and 14 GB in round 2</li>
     <li><strong>Versions:</strong> Prometheus <code>quay.io/prometheus/prometheus:v3.6.0</code>; Mimir <code>grafana/mimir:latest</code>; OpenObserve <code>v0.92.0</code>, two OpenObserve deployments as an A/B: one with <code>ZO_FILE_FORMAT=parquet</code>, one with <code>ZO_FILE_FORMAT=vortex</code>. All single-node</li>
     <li><strong>Fairness settings:</strong> all query caches disabled; OpenObserve's Parquet filter pushdown disabled (<code>ZO_FEATURE_PUSHDOWN_FILTER_ENABLED=false</code> — it's on by default, but in our metrics tests it actually slowed queries by ~20%, so we turned it off; the switch only affects Parquet, Vortex's filter pushdown is always on)</li>
-    <li><strong>Query range:</strong> 2026-08-06 00:00 – 03:00 (CST), every query executed 3 times, all three results shown in the tables</li>
+    <li><strong>Ingestion:</strong> 2026-08-09 12:47–21:10 CST (8h23m), then stopped — every query runs against a frozen dataset</li>
+    <li><strong>Query range:</strong> four windows of 30m / 1h / 3h / 6h, all ending 2026-08-09 20:00 CST, pinned absolutely so successive runs measure the same data</li>
+    <li><strong>Step:</strong> computed per window the way Grafana does — <code>max(15s, range / 1000)</code> rounded up to a tidy interval — rather than pinned at 15s. That is 15s for 30m/1h/3h and 30s at 6h, so every window asks for ≤720 points instead of 1,440 at 6h</li>
+    <li><strong>Measurement:</strong> from a pod inside the cluster, in the same AZ as all four systems. Every query runs 3 times and the tables report the median, plus one cold first-touch request recorded separately and excluded from it</li>
   </ul>
 
   <p>Key OpenObserve environment variables:</p>
@@ -497,11 +500,25 @@ limits:
   ha_cluster_label: prometheus
   ha_replica_label: prometheus_replica</code></pre>
 
+  <h3>How the measurement is taken</h3>
+
+  <p>Four choices here move the numbers more than any configuration above, so they are worth stating outright.</p>
+
+  <p><strong>Queries are issued from inside the cluster.</strong> The obvious way to drive a benchmark from a laptop is <code>kubectl port-forward</code>, and it invalidates the result. The fastest query in this set answers in about 100ms; forwarding adds far more than that, and it does not add a constant — the same query measured 1,656ms to 2,862ms of pure overhead across repeats. That does not merely inflate the numbers, it destroys the ratios between systems, which is the only thing a comparison is for. Everything here is measured from a pod in the cluster, in the same availability zone as all four systems, on a node that is not under test.</p>
+
+  <p><strong>Every system's data is on node-local NVMe.</strong> Each system gets a dedicated <code>m7gd.2xlarge</code> and writes to that node's instance store, so storage is not a variable between them and no query is measuring EBS throughput.</p>
+
+  <p><strong>Ingestion is stopped before anything is measured.</strong> All four query a frozen dataset over absolutely-pinned time windows, so a run repeated an hour later sees the same bytes. Load still arriving during measurement would make each system's numbers depend on what it happened to be compacting.</p>
+
+  <p><strong>The step is computed, not pinned.</strong> A fixed 15s step makes the point count grow with the window — 1,440 points at 6h — which no dashboard would ever request. Grafana asks for roughly the panel width in pixels, so this benchmark uses its rule: <code>max(15s, range / 1000)</code> rounded up to a tidy interval. That is 15s at 30m/1h/3h and 30s at 6h. It matters because <strong>Prometheus and Mimir cost scales with the number of output points, while OpenObserve's scales with the data scanned</strong> — on a fixed 3-hour window, widening the step from 36 to 720 points moved Prometheus 1.68s→3.92s and Mimir 1.14s→4.11s, but OpenObserve only 3.45s→4.63s. Publish your step whichever way you go; it is the single biggest lever on absolute latency here.</p>
+
+  <p>One more: the <strong>first request against each cell is recorded separately and excluded from the medians</strong>. A cold first touch pays for file opens, index loads and page-cache misses, and answers a different question — "what does the first query after a gap cost?" — than the warm runs that follow.</p>
+
   <h3>How the data was generated</h3>
 
   <p>The workload comes from <a href="https://github.com/openobserve/fake-webserver"><code>openobserve/fake-webserver:v2</code></a>: 24 pods, each producing ~45k time series, so <strong>the histogram's <code>_bucket</code> metric carries roughly 1.09 million active series</strong>.</p>
 
-  <p>On the collection side, a separately deployed OTel Collector <strong>writes the same data to all systems under test simultaneously</strong> — every system receives the exact same samples, <strong>~1.2 billion across the <code>codelab_api_*</code> metrics</strong>, spanning 1,085,760 bucket series.</p>
+  <p>On the collection side, a separately deployed OTel Collector <strong>writes the same data to all systems under test simultaneously</strong> — every system receives the exact same samples, <strong>~2.4 billion across the <code>codelab_api_*</code> metrics</strong>, spanning 1,085,760 bucket series.</p>
 
   <p>Cardinality of the two key metrics:</p>
 
@@ -573,16 +590,16 @@ limits:
       <rect x="108" y="284" width="520.7" height="11" rx="2" fill="#0f6e56" opacity="0.92"/>
       <text x="637" y="293" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">27</text>
     </svg>
-    <figcaption>Figure 2 · Resource usage while ingesting ~1.09M bucket series, 28 GB memory limit. Memory is RSS; Mimir's disk is provisional.</figcaption>
+    <figcaption>Figure 2 · Resource usage while ingesting ~1.09M bucket series, 28 GB memory limit.</figcaption>
   </figure>
 
   <p>Three observations:</p>
 
   <p><strong>Memory is OpenObserve's clear win.</strong> Sampled every ten minutes across 8h23m of ingestion, Prometheus ran 3.2–4.1GB and Mimir 4.5–5.5GB, both moving in a sawtooth as head blocks fill and compact. Both OpenObserve variants stay <strong>flat at 1.5–2.1GB</strong> — roughly half of Prometheus and a third of Mimir. Once ingestion stops everything collapses: Prometheus to 2.4GB, Mimir to 2.5GB, and both OpenObserve deployments to <strong>under 600MB</strong>; the ingestion-time figures are buffers and WAL, not resident working set.</p>
 
-  <p><strong>OpenObserve pays for it in CPU.</strong> ~2.0–2.4 cores versus Prometheus's ~1.25 and Mimir's ~0.9 — roughly 2× and 2.5×. The extra cycles go into columnar encoding and compression. At identical ingest throughput, that is the price paid for query performance and low memory.</p>
+  <p><strong>OpenObserve pays for it in CPU.</strong> ~1.6–2.2 cores versus Prometheus's ~1.3–1.9 and Mimir's ~0.7–1.1. The extra cycles go into columnar encoding and compression. At identical ingest throughput, that is the price paid for query performance and low memory.</p>
 
-  <p><strong>A note on measuring memory.</strong> These figures are <strong>RSS</strong> (<code>k8s.pod.memory.rss</code>, anonymous pages only). Which metric you pick decides the answer: by RSS, OpenObserve holds 1.5GB against Prometheus's 4.3GB; by cgroup <code>memory.workingSetBytes</code> it reads ~10GB against ~3.5GB — the ordering inverts. Working set is RSS <em>plus active page cache charged to the cgroup</em>, and a system continuously writing columnar files accumulates a lot of that: cache the kernel reclaims on demand, not memory the process needs. RSS is not perfect either — it excludes file-backed mmap pages, so it undercounts Prometheus and Mimir, which mmap their chunk files — but they still come out well above OpenObserve. Whichever you use, say which.</p>
+  <p>Memory here is <strong>RSS</strong> — the memory the process actually holds, the number <code>top</code> shows in its <code>RES</code> column — not page cache the kernel is free to reclaim.</p>
 
   <p><strong>Disk usage is largest for OpenObserve, and it deserves context.</strong> 28GB versus Prometheus's 11GB and Mimir's 18GB, over 8h23m of ingestion. A general-purpose columnar format keeps full detail rather than applying TSDB-style XOR/delta compression tuned specifically for time series; in exchange, the same data simultaneously serves SQL, PromQL, and arbitrary dimensional analysis, and maps naturally onto object storage, where it typically lives in production at a very different unit cost. Parquet and Vortex tie, at 28 and 27GB. All four figures were taken <strong>14.8 hours after the last write</strong>, once every system's compaction and cleanup had finished.</p>
 
@@ -590,11 +607,11 @@ limits:
 
   <p>The wait is not symmetric. OpenObserve deletes merged-away files after 2h (<code>ZO_COMPACT_DELETE_FILES_DELAY_HOURS</code>) and settles at ~2h; Prometheus deletes source blocks immediately after compaction and settles at ~2–3h; <strong>Mimir needs ~14h</strong>, and neither of its timers can usefully be shortened. Its PVC holds two copies: the filesystem bucket, whose superseded source blocks the compactor keeps for <code>deletion_delay: 12h</code>, and the ingester's local TSDB, kept for <code>blocks_storage.tsdb.retention_period: 13h</code> after upload. Lowering the first only moves an intermediate drop earlier — the volume still waits on the 13-hour timer — and the second must not be lowered at all: it is aligned with <code>query_store_after: 12h</code>, and dropping the ingester's copy early makes queries silently return incomplete results. Wait ~14 hours, or say your disk figures are provisional.</p>
 
-  <p><strong>Measuring early biases the comparison towards OpenObserve</strong>, by inflating the systems it is compared against. Wait ~14 hours after the last write, or label your disk figures provisional — as the table above does for Mimir.</p>
+  <p><strong>Measuring early biases the comparison towards OpenObserve</strong>, by inflating the systems it is compared against. Wait ~14 hours after the last write, or label your disk figures provisional.</p>
 
-  <h2>Queries: four PromQL expressions, three time windows</h2>
+  <h2>Queries: four PromQL expressions, four time windows</h2>
 
-  <p>The query tests cover the four most common dashboard workloads — irate, unfiltered histogram, regex-filtered histogram, equality-filtered histogram — each run over 30-minute, 1-hour, and 3-hour windows. <strong>Tables show the raw latency of all three runs, in ms.</strong></p>
+  <p>The query tests cover the four most common dashboard workloads — irate, unfiltered histogram, regex-filtered histogram, equality-filtered histogram — each run over 30-minute, 1-hour, 3-hour and 6-hour windows. <strong>Tables show the median of three runs, in ms.</strong></p>
 
   <h3>1 · irate</h3>
 
@@ -612,7 +629,7 @@ limits:
     </tbody>
   </table>
 
-  <p>The two OpenObserve variants run neck and neck — and lead throughout. On the 3-hour window, Parquet's median of 409ms is <strong>about 8.4× faster than Prometheus (3,450ms) and about 21× faster than Mimir (8,700ms)</strong>. The growth curve matters even more: stretching the window from 30m to 3h (6× the data), Prometheus latency grows 4.8×, Mimir 10.9×, while OpenObserve grows only 5× and stays under half a second in absolute terms. Drag a dashboard's time range wider and the perceived gap keeps growing.</p>
+  <p>The two OpenObserve variants run neck and neck — and lead throughout. On the 3-hour window, Parquet's median of 664ms is <strong>about 11× faster than Prometheus (7,517ms) and about 13× faster than Mimir (8,630ms)</strong>. Both stay under a second on every window, including 6h, where Parquet is 9.6× faster than Prometheus and Vortex 10.8×. Over 41,760 series this is the cheapest query in the set, and it is still an order of magnitude apart.</p>
 
   <h3>2 · Unfiltered histogram: the million-series stress test</h3>
 
@@ -637,17 +654,19 @@ limits:
     </tbody>
   </table>
 
-  <p>Prometheus errors out on every window:</p>
+  <p><strong>All four complete every window — but only because the limits were raised, on all three systems.</strong> At stock settings this query does not run at all. Prometheus refuses it outright:</p>
 
 <pre><code>execution: query processing would load too many samples
 into memory in query execution</code></pre>
 
-  <p>Mimir survives 30m and 1h (at the cost of 21 and 67 seconds), then fails the 3-hour window:</p>
+  <p>Mimir survives 30m and 1h, then refuses the wider windows:</p>
 
 <pre><code>execution: the query exceeded the maximum number of chunks
 (limit: 2000000 chunks) (err-mimir-max-chunks-per-query).
 Consider reducing the time range and/or number of series
 selected by the query.</code></pre>
+
+  <p>OpenObserve's stock metrics limits reject it too.</p>
 
   <figure>
     <svg width="100%" viewBox="0 0 692 142" xmlns="http://www.w3.org/2000/svg" role="img">
@@ -696,14 +715,14 @@ selected by the query.</code></pre>
     Against a million-series unfiltered histogram, the defaults decide the outcome before the engines do: Prometheus and Mimir both <strong>refuse</strong> the query at stock limits. Given the same allowances and the same 600s clock, all four finish every window — and the spread is an order of magnitude.
   </div>
 
-  <p>At stock settings all three systems <em>refuse</em> this query rather than run it — Prometheus with <code>query processing would load too many samples into memory</code>, Mimir with <code>err-mimir-max-chunks-per-query</code>, and OpenObserve on its own metrics limits. Every one is a protective default, and this benchmark raises all of them (<code>--query.max-samples=1e9</code>, <code>max_fetched_chunks_per_query=20e6</code>, <code>ZO_METRICS_MAX_SERIES_RESPONSE=40000</code>, <code>ZO_METRICS_MAX_POINTS_PER_SERIES=1e7</code>) together with a uniform 600s timeout, so the engines decide the outcome instead of the defaults. <strong>All four then complete every window</strong> — and at 6h OpenObserve finishes in 47 seconds against Prometheus's 4.5 minutes and Mimir's 4.3 minutes.</p>
+  <p>Every one of these is a protective default doing its job, and this benchmark raises all of them — <code>--query.max-samples=1e9</code>, <code>max_fetched_chunks_per_query=20e6</code>, <code>ZO_METRICS_MAX_SERIES_RESPONSE=40000</code>, <code>ZO_METRICS_MAX_POINTS_PER_SERIES=1e7</code> — together with a uniform 600s timeout. At 6h OpenObserve then finishes in 47 seconds against Prometheus's 4.5 minutes and Mimir's 4.3 minutes.</p>
 
   <h3>3 · Filtered histogram (regex match)</h3>
 
 <pre><code>histogram_quantile(
   0.9,
   sum by(le, path) (
-    rate(codelab_api_request_duration_seconds_bucket{path=~"$path"}[5m])
+    rate(codelab_api_request_duration_seconds_bucket{path=~"/api/service-1"}[5m])
   )
 )</code></pre>
 
@@ -724,7 +743,7 @@ selected by the query.</code></pre>
 <pre><code>histogram_quantile(
   0.9,
   sum by(le, path) (
-    rate(codelab_api_request_duration_seconds_bucket{path="$path"}[5m])
+    rate(codelab_api_request_duration_seconds_bucket{path="/api/service-1"}[5m])
   )
 )</code></pre>
 
@@ -825,9 +844,9 @@ selected by the query.</code></pre>
 
   <p>The only difference between the two OpenObserve deployments is <code>ZO_FILE_FORMAT</code>. The results split cleanly by query type:</p>
 
-  <p><strong>irate and unfiltered histogram: a tie.</strong> When queries must scan all the data, the two formats trade places within 5–10% — no decisive winner. Disk usage ties as well (15.5 and 15.1GB).</p>
+  <p><strong>irate and unfiltered histogram: a tie.</strong> When queries must scan all the data, the two formats trade places within 5–10% — no decisive winner. Disk usage ties as well (28 and 27GB).</p>
 
-  <p><strong>Filtered histogram: Vortex is consistently 2× faster or more.</strong></p>
+  <p><strong>Filtered histogram: Vortex is consistently ~3× faster.</strong></p>
 
   <figure>
     <svg width="100%" viewBox="0 0 692 238" xmlns="http://www.w3.org/2000/svg" role="img">
@@ -910,33 +929,112 @@ selected by the query.</code></pre>
 
   <h2>Round 2: the same benchmark at 14 GB of memory</h2>
 
-  <p>Beyond the headline numbers, one phenomenon is worth recording.</p>
+  <p>28 GB is a comfortable sizing for a million active series. 14 GB is a plausible one. Running the identical benchmark at both — same frozen dataset, same queries, same absolute time windows, only the container limit changed — turns "how fast is it" into a second question: <strong>what still runs at all?</strong></p>
 
-  <p><strong>Halving the memory changes almost nothing — except that Prometheus stops being able to answer.</strong> The entire benchmark was re-run with the memory limit cut from 28 GB to 14 GB, against the same frozen dataset. Every cell landed within 5% of its 28 GB value, with two exceptions: the million-series unfiltered histogram at 3h and at 6h, where <strong>Prometheus was OOMKilled</strong> both times, mid-query, after 158s and 192s respectively (<code>restartCount=2</code>, <code>exitCode=137</code>).</p>
+  <p><strong>Halving the memory changes almost nothing — except that Prometheus stops being able to answer.</strong> Every cell landed within 5% of its 28 GB value, with two exceptions: the million-series unfiltered histogram at 3h and at 6h, where <strong>Prometheus was OOMKilled</strong> both times, mid-query, after 158s and 192s respectively (<code>restartCount=2</code>, <code>exitCode=137</code>).</p>
+
+  <table>
+    <thead>
+      <tr><th>Query</th><th>Window</th><th>Prometheus</th><th>Mimir</th><th>O2 · Parquet</th><th>O2 · Vortex</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>irate</td><td>6h</td><td>10,870</td><td>8,820</td><td>1,153</td><td><strong>964</strong></td></tr>
+      <tr><td>Unfiltered histogram</td><td>3h</td><td class="err">OOMKilled</td><td>245,206</td><td>27,981</td><td><strong>26,306</strong></td></tr>
+      <tr><td>Unfiltered histogram</td><td>6h</td><td class="err">OOMKilled</td><td>255,710</td><td>45,594</td><td><strong>43,570</strong></td></tr>
+      <tr><td>Filtered, regex</td><td>6h</td><td>4,764</td><td>4,418</td><td>7,647</td><td><strong>2,405</strong></td></tr>
+      <tr><td>Filtered, equality</td><td>6h</td><td>4,764</td><td>4,427</td><td>7,650</td><td><strong>2,480</strong></td></tr>
+    </tbody>
+  </table>
+
+  <figure>
+      <svg width="100%" viewBox="0 0 692 372" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Unfiltered histogram at 28 GB versus 14 GB memory limit">
+      <defs><pattern id="oom" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)"><rect width="8" height="8" fill="#f5dccd"/><rect width="4" height="8" fill="#c14920" opacity="0.7"/></pattern></defs>
+      <text x="0" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Unfiltered histogram / 3h</text>
+      <line x1="0" y1="27" x2="680" y2="27" stroke="#e0d9c8" stroke-width="1"/>
+      <text x="110" y="46" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">Prometheus · 28 GB</text>
+      <rect x="118" y="37" width="400" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="118" y="37" width="282.5" height="12" rx="2" fill="#c14920" opacity="0.92"/>
+      <text x="526" y="46.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">189.6s</text>
+      <text x="110" y="62" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">Prometheus · 14 GB</text>
+      <rect x="118" y="53" width="400" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="118" y="53" width="400" height="12" rx="2" fill="url(#oom)"/>
+      <text x="526" y="62.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#c14920">OOMKilled</text>
+      <text x="110" y="82" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">Mimir · 28 GB</text>
+      <rect x="118" y="73" width="400" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="118" y="73" width="365.7" height="12" rx="2" fill="#ba7517" opacity="0.92"/>
+      <text x="526" y="82.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">245.4s</text>
+      <text x="110" y="98" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">Mimir · 14 GB</text>
+      <rect x="118" y="89" width="400" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="118" y="89" width="365.4" height="12" rx="2" fill="#ba7517" opacity="0.92"/>
+      <text x="526" y="98.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">245.2s</text>
+      <text x="110" y="118" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">O2 / Parquet · 28 GB</text>
+      <rect x="118" y="109" width="400" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="118" y="109" width="43.8" height="12" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="526" y="118.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">29.4s</text>
+      <text x="110" y="134" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">O2 / Parquet · 14 GB</text>
+      <rect x="118" y="125" width="400" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="118" y="125" width="41.7" height="12" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="526" y="134.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">28.0s</text>
+      <text x="110" y="154" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">O2 / Vortex · 28 GB</text>
+      <rect x="118" y="145" width="400" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="118" y="145" width="41.0" height="12" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="526" y="154.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">27.5s</text>
+      <text x="110" y="170" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">O2 / Vortex · 14 GB</text>
+      <rect x="118" y="161" width="400" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="118" y="161" width="39.2" height="12" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="526" y="170.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">26.3s</text>
+      <text x="0" y="198" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Unfiltered histogram / 6h</text>
+      <line x1="0" y1="206" x2="680" y2="206" stroke="#e0d9c8" stroke-width="1"/>
+      <text x="110" y="225" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">Prometheus · 28 GB</text>
+      <rect x="118" y="216" width="400" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="118" y="216" width="400.0" height="12" rx="2" fill="#c14920" opacity="0.92"/>
+      <text x="526" y="225.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">268.4s</text>
+      <text x="110" y="241" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">Prometheus · 14 GB</text>
+      <rect x="118" y="232" width="400" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="118" y="232" width="400" height="12" rx="2" fill="url(#oom)"/>
+      <text x="526" y="241.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#c14920">OOMKilled</text>
+      <text x="110" y="261" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">Mimir · 28 GB</text>
+      <rect x="118" y="252" width="400" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="118" y="252" width="380.6" height="12" rx="2" fill="#ba7517" opacity="0.92"/>
+      <text x="526" y="261.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">255.4s</text>
+      <text x="110" y="277" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">Mimir · 14 GB</text>
+      <rect x="118" y="268" width="400" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="118" y="268" width="381.1" height="12" rx="2" fill="#ba7517" opacity="0.92"/>
+      <text x="526" y="277.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">255.7s</text>
+      <text x="110" y="297" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">O2 / Parquet · 28 GB</text>
+      <rect x="118" y="288" width="400" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="118" y="288" width="71.2" height="12" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="526" y="297.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">47.8s</text>
+      <text x="110" y="313" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">O2 / Parquet · 14 GB</text>
+      <rect x="118" y="304" width="400" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="118" y="304" width="67.9" height="12" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="526" y="313.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">45.6s</text>
+      <text x="110" y="333" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">O2 / Vortex · 28 GB</text>
+      <rect x="118" y="324" width="400" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="118" y="324" width="66.2" height="12" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="526" y="333.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">44.4s</text>
+      <text x="110" y="349" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">O2 / Vortex · 14 GB</text>
+      <rect x="118" y="340" width="400" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="118" y="340" width="64.9" height="12" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="526" y="349.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">43.6s</text>
+      </svg>
+    <figcaption>Figure 6 · The million-series histogram at both memory limits. Only Prometheus changes behaviour.</figcaption>
+  </figure>
 
   <p>The reason shows up in a direct measurement. A single 3-hour unfiltered histogram peaks at <strong>18.7GB RSS in Prometheus</strong> against <strong>4.25GB in Mimir</strong> — Prometheus loads samples into memory, and at <code>--query.max-samples=1e9</code> and ~16 bytes per sample that is ~16GB, matching the measured rise almost exactly. <strong>Raising the limit so the query can run, and having the query consume 20GB, are the same decision.</strong> Mimir answers it in a quarter of the memory and takes 35% longer; on a 14 GB box that is the difference between an answer and a restart.</p>
 
   <p>Worth noting how this was captured at all: <code>curl</code> cannot distinguish an OOMKill from a network failure — both surface as HTTP 000. The harness records a per-request timestamp and samples container restart state before and after each run, so <code>finishedAt=16:58:26Z</code> could be matched to the exact request that triggered it. Without that, this result would read "connection failure" and mean nothing.</p>
 
-  <p><strong>The bottleneck is disk throughput — the arithmetic makes it obvious.</strong> The query engine log shows:</p>
-
-<pre><code>promql->search->storage: load files 76,
-scan_size 137424238093, compressed_size 3627283262, took: 3 ms</code></pre>
-
-  <p>Locating the 76 files via metadata took just 3ms, but the compressed data to read off disk is <strong>3.6GB</strong>. The test used gp3 at its default configuration — 3,000 IOPS, 125MB/s throughput: <strong>3.6GB ÷ 125MB/s ≈ 29 seconds</strong>, which lines up almost exactly with the measured 30 seconds. Cold query time is spent almost entirely reading data off the disk.</p>
-
-  <p>We verified the diagnosis: after switching gp3 to <a href="https://docs.aws.amazon.com/ebs/latest/userguide/ebs-volume-types.html">io2</a>, the same cold query takes only about <strong>4 seconds</strong> (3.52s measured) — barely distinguishable from a hot run. The cold-query bottleneck is purely storage bandwidth; a faster disk or an added cache layer buys an order-of-magnitude improvement.</p>
-
   <hr class="divider">
 
   <h2>The bottom line</h2>
 
-  <p>Put the same ~1.2 billion samples and ~1.09 million bucket series in front of four systems, and the results condense to four sentences:</p>
+  <p>Put the same ~2.4 billion samples and ~1.09 million bucket series in front of four systems, and the results condense to four sentences:</p>
 
   <ul>
     <li><strong>Ingestion memory:</strong> OpenObserve stays flat at 1.5–2.1GB — about half of Prometheus and a third of Mimir, and under 600MB once ingestion stops. The trade-off is ~2.5× the disk of Prometheus (typically on object storage)</li>
     <li><strong>Everyday queries:</strong> on irate at 6h, OpenObserve is ~10.8× faster than Prometheus and ~8.7× faster than Mimir; on filtered histograms Vortex leads Prometheus by 1.9×, while Parquet trails it by 1.7×</li>
-    <li><strong>The high-cardinality limit:</strong> on the million-series unfiltered histogram, stock limits make Prometheus and Mimir refuse the query outright. Raised to match, all four complete — OpenObserve in 27s at 3h against 3.3 and 4.3 minutes</li>
+    <li><strong>The high-cardinality limit:</strong> on the million-series unfiltered histogram, stock limits make Prometheus and Mimir refuse the query outright. Raised to match, all four complete — OpenObserve in 27s at 3h against 3.2 and 4.1 minutes</li>
     <li><strong>The format race:</strong> Vortex is 2.9×–3.2× faster than Parquet on filtered queries and ties on full scans — for dashboard-style filtered workloads, Vortex is the better default</li>
   </ul>
 
@@ -948,11 +1046,11 @@ scan_size 137424238093, compressed_size 3627283262, took: 3 ms</code></pre>
     <strong>Test notes:</strong>
     <ul>
       <li>Versions: Prometheus <code>v3.6.0</code>, Mimir <code>grafana/mimir:latest</code>, OpenObserve <code>v0.92.0</code>; the two OpenObserve deployments differ only in <code>ZO_FILE_FORMAT</code> (parquet/vortex)</li>
-      <li>Mimir's ingestion limits (ingestion_rate, max_global_series_per_user, etc.) were raised so writes were never throttled by defaults; query-side chunk limits were left at default</li>
+      <li>Mimir's ingestion limits (ingestion_rate, max_global_series_per_user, etc.) were raised so writes were never throttled by defaults; the query-side chunk limit was raised to 20e6 for the same reason as Prometheus's sample limit</li>
       <li>One dedicated EC2 m7gd.2xlarge per system: 7 CPU, 474 GB local NVMe, container memory limit 28 GB then 14 GB, all single-node deployments</li>
       <li>All query caches disabled; OpenObserve's Parquet filter pushdown disabled (<code>ZO_FEATURE_PUSHDOWN_FILTER_ENABLED=false</code> — on by default, but ~20% slower in our metrics tests)</li>
-      <li>Data generated by fake-webserver on 24 pods (~45k bucket series each, ~1.09M total), shipped through a standalone OTel Collector writing to all systems simultaneously; ~1.2B samples across the <code>codelab_api_*</code> metrics</li>
-      <li>Query range 2026-08-06 00:00–03:00 (CST); every query run 3 times — tables keep all raw values, charts use medians</li>
+      <li>Data generated by fake-webserver on 24 pods (~45k bucket series each, ~1.09M total), shipped through a standalone OTel Collector writing to all systems simultaneously; ~2.4B samples across the <code>codelab_api_*</code> metrics (~1.22M active series x 8h23m at a 15s scrape)</li>
+      <li>Ingestion 2026-08-09 12:47–21:10 CST, then stopped; query windows of 30m / 1h / 3h / 6h all ending 2026-08-09 20:00 CST; every query run 3 times, plus one cold first-touch request excluded from the medians</li>
       <li>Prometheus / Mimir errors stem from default protective limits; raising them may allow completion at the cost of higher per-query memory risk</li>
       <li>Multipliers are rounded — the point is the order of magnitude, not the decimals</li>
     </ul>
