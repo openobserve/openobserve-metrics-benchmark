@@ -104,7 +104,9 @@ spec:
       # replacement loses the whole dataset.
       - name: data
         hostPath:
-          path: /mnt/k8s-disks/0/prometheus
+          # Dataset switch: change this one path component to keep an old
+          # dataset on disk and start a new one. See deploy/README.md#datasets.
+          path: /mnt/k8s-disks/0/run-a/prometheus
           type: DirectoryOrCreate
       dnsPolicy: ClusterFirst
       restartPolicy: Always

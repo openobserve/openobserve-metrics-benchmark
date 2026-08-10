@@ -159,7 +159,8 @@ spec:
       # replacement loses the whole dataset.
       - name: data
         hostPath:
-          path: /mnt/k8s-disks/0/mimir
+          # Dataset switch -- see deploy/README.md#datasets.
+          path: /mnt/k8s-disks/0/run-a/mimir
           type: DirectoryOrCreate
       dnsPolicy: ClusterFirst
       restartPolicy: Always

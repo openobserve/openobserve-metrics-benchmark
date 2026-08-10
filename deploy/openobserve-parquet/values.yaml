@@ -6,7 +6,7 @@
 image:
   oss:
     repository: openobserve/openobserve
-    tag: "v0.92.0-rc3"
+    tag: "v0.92.0"
   enterprise:
     repository: openobserve/openobserve-enterprise
     tag: "unset"
@@ -56,7 +56,8 @@ extraVolumeMounts:
 extraVolumes:
   - name: nvme
     hostPath:
-      path: /mnt/k8s-disks/0/o2-parquet
+      # Dataset switch -- see deploy/README.md#datasets.
+      path: /mnt/k8s-disks/0/run-a/o2-parquet
       type: DirectoryOrCreate
 
 headless:
@@ -164,10 +165,10 @@ gateway:
 resources:
   limits:
     cpu: 7
-    memory: 28G
+    memory: 14G
   requests:
     cpu: 7
-    memory: 28G
+    memory: 14G
 
 nodeSelector: {}
 

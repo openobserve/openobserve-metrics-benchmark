@@ -203,6 +203,38 @@ did not take effect on these nodes: `/dev/nvme1n1` was present but had no
 filesystem and was not mounted. If it works for you, the DaemonSet finds the
 mount already in place and does nothing.
 
+### Datasets
+
+The data path carries a dataset name:
+
+```
+/mnt/k8s-disks/0/<dataset>/<system>
+```
+
+Change that one component in all four files and re-apply, and the systems come
+up empty and start a fresh dataset — while the previous one stays on disk,
+untouched. Switching the name back re-attaches the old data, so a finished run
+can be re-queried later without re-ingesting it.
+
+```bash
+grep -rn 'mnt/k8s-disks/0' */deploy.yaml */values.yaml   # see the current name
+```
+
+What is on the nodes right now:
+
+```bash
+kubectl -n kube-system exec ds/mount-nvme -- \
+  nsenter -t 1 -m -- du -sh /mnt/k8s-disks/0/*/*
+```
+
+Each dataset costs roughly 3 GB per hour of ingestion per system at 24
+fake-webserver replicas, so several fit in the 474 GB instance store. They are
+still ephemeral: a node replacement takes every dataset on it.
+
+**All four files must use the same name.** A mismatch is silent — one system
+quietly starts empty while the others carry on, and the cardinality check is
+the only thing that would catch it.
+
 ### Why the ordering matters
 
 **Apply the DaemonSet before the systems under test.** A pod that starts first

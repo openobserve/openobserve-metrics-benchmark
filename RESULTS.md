@@ -19,7 +19,7 @@ questions — *how fast* at 28 GB, and *what still runs at all* at 14 GB.
 | Container limit | 7 CPU, memory **28 GB** (round 1) then **14 GB** (round 2); requests == limits |
 | Prometheus | `quay.io/prometheus/prometheus:v3.6.0` |
 | Mimir | `grafana/mimir:latest` (pulled 2026-08) |
-| OpenObserve | `0.92.0-rc1-b31ff6c`, two deployments differing only in `ZO_FILE_FORMAT` |
+| OpenObserve | `v0.92.0`, two deployments differing only in `ZO_FILE_FORMAT` |
 | Load | `openobserve/fake-webserver:v2` × 24 pods, scraped every 15s |
 | Ingestion | 2026-08-09 12:47–21:10 CST (8h23m), then **stopped** |
 | Query range | ends 2026-08-09 20:00 CST, pinned absolutely |
@@ -81,13 +81,13 @@ sum by (path) (irate(codelab_api_request_duration_seconds_count[1m]))
 
 | Window | Step | Prometheus | Mimir | O2 · Parquet | O2 · Vortex |
 | --- | --- | --- | --- | --- | --- |
-| 30m | 15s | 1,332 | 1,216 | **102** | 106 |
-| 1h | 15s | 2,393 | 2,254 | 180 | **158** |
-| 3h | 15s | 7,517 | 8,630 | 537 | **506** |
-| 6h | 30s | 10,991 | 8,814 | 1,076 | **980** |
+| 30m | 15s | 1,332 | 1,216 | **105** | 132 |
+| 1h | 15s | 2,393 | 2,254 | 231 | **215** |
+| 3h | 15s | 7,517 | 8,630 | 664 | **587** |
+| 6h | 30s | 10,991 | 8,814 | 1,143 | **1,018** |
 
 Over 41,760 series. OpenObserve answers in under a second on every window; at 6h
-it is **11.2× faster than Prometheus** and 9.0× faster than Mimir. The two
+it is **10.8× faster than Prometheus** and 8.7× faster than Mimir. The two
 formats tie — nothing here for Vortex's layout to exploit.
 
 ### 2 · Unfiltered histogram
@@ -101,10 +101,10 @@ No label filter: `rate` + aggregation over all 1,085,760 series.
 
 | Window | Step | Prometheus | Mimir | O2 · Parquet | O2 · Vortex |
 | --- | --- | --- | --- | --- | --- |
-| 30m | 15s | 35,517 | 34,904 | 4,598 | **4,476** |
-| 1h | 15s | 62,055 | 64,813 | 8,237 | **7,500** |
-| 3h | 15s | 189,565 | 245,369 | 27,559 | **27,031** |
-| 6h | 30s | 268,419 | 255,386 | **46,645** | 46,833 |
+| 30m | 15s | 35,517 | 34,904 | 4,796 | **4,301** |
+| 1h | 15s | 62,055 | 64,813 | 7,902 | **7,452** |
+| 3h | 15s | 189,565 | 245,369 | 29,369 | **27,497** |
+| 6h | 30s | 268,419 | 255,386 | 47,785 | **44,398** |
 
 **All four complete every window — but only because the limits were raised, on
 all three systems.** At stock settings Prometheus rejects this query outright
@@ -117,8 +117,8 @@ this repo raises all of them — `--query.max-samples=1e9`,
 engines decide the outcome rather than the defaults. The full list is in
 [deploy/README.md](deploy/README.md#query-limits).
 
-Once they do run it, OpenObserve is **5.8× faster than Prometheus** and 5.5×
-faster than Mimir at 6h — 47 seconds against 4.5 and 4.3 minutes.
+Once they do run it, OpenObserve is **6.0× faster than Prometheus** and 5.8×
+faster than Mimir at 6h — 44 seconds against 4.5 and 4.3 minutes.
 
 ### 3 · Filtered histogram (regex match)
 
@@ -129,10 +129,10 @@ histogram_quantile(0.9, sum by(le, path) (
 
 | Window | Step | Prometheus | Mimir | O2 · Parquet | O2 · Vortex |
 | --- | --- | --- | --- | --- | --- |
-| 30m | 15s | 610 | 606 | 654 | **229** |
-| 1h | 15s | 1,085 | 1,123 | 1,133 | **379** |
-| 3h | 15s | 3,526 | 4,249 | 4,356 | **1,303** |
-| 6h | 30s | 4,798 | 4,416 | 7,950 | **2,422** |
+| 30m | 15s | 610 | 606 | 744 | **255** |
+| 1h | 15s | 1,085 | 1,123 | 1,151 | **403** |
+| 3h | 15s | 3,526 | 4,249 | 4,336 | **1,353** |
+| 6h | 30s | 4,798 | 4,416 | 8,199 | **2,549** |
 
 ### 4 · Filtered histogram (equality match)
 
@@ -143,10 +143,10 @@ histogram_quantile(0.9, sum by(le, path) (
 
 | Window | Step | Prometheus | Mimir | O2 · Parquet | O2 · Vortex |
 | --- | --- | --- | --- | --- | --- |
-| 30m | 15s | 603 | 608 | 651 | **222** |
-| 1h | 15s | 1,119 | 1,137 | 1,109 | **362** |
-| 3h | 15s | 3,627 | 4,239 | 4,265 | **1,374** |
-| 6h | 30s | 4,770 | 4,417 | 7,846 | **2,666** |
+| 30m | 15s | 603 | 608 | 663 | **248** |
+| 1h | 15s | 1,119 | 1,137 | 1,126 | **444** |
+| 3h | 15s | 3,627 | 4,239 | 4,473 | **1,317** |
+| 6h | 30s | 4,770 | 4,417 | 7,986 | **2,404** |
 
 Queries 3 and 4 are a pair to show the **filter type barely matters** — regex
 and equality land within 3% of each other everywhere. Scan volume is the
@@ -155,7 +155,7 @@ variable, not matcher syntax.
 Filtering one path out of 54 changes the ranking completely, and it splits the
 two OpenObserve formats:
 
-- **Vortex wins outright**, by 2.0× over Prometheus and 1.8× over Mimir at 6h.
+- **Vortex wins outright**, by 1.9× over Prometheus and 1.7× over Mimir at 6h.
 - **Parquet loses to both**, and the gap widens with the window: level at 30m,
   1.7× slower than Prometheus at 6h.
 
@@ -168,11 +168,11 @@ Same dataset, same queries, half the memory. **Only one thing breaks.**
 
 | Query | Window | Prometheus | Mimir | O2 · Parquet | O2 · Vortex |
 | --- | --- | --- | --- | --- | --- |
-| irate | 6h | 10,799 | 8,822 | 1,165 | **1,045** |
-| Unfiltered histogram | 3h | **OOMKilled** | 245,365 | 28,030 | **26,258** |
-| Unfiltered histogram | 6h | **OOMKilled** | 256,976 | 45,212 | **42,586** |
-| Filtered, regex | 6h | 4,976 | 4,418 | 7,481 | **2,399** |
-| Filtered, equality | 6h | 4,777 | 4,412 | 7,517 | **2,353** |
+| irate | 6h | 10,870 | 8,820 | 1,153 | **964** |
+| Unfiltered histogram | 3h | **OOMKilled** | 245,206 | 27,981 | **26,306** |
+| Unfiltered histogram | 6h | **OOMKilled** | 255,710 | 45,594 | **43,570** |
+| Filtered, regex | 6h | 4,764 | 4,418 | 7,647 | **2,405** |
+| Filtered, equality | 6h | 4,764 | 4,427 | 7,650 | **2,480** |
 
 Everything else lands within 5% of its 28 GB value. Halving the memory changes
 almost nothing — **except that Prometheus can no longer answer the
@@ -221,10 +221,10 @@ between an answer and a restart.
 
 | Query | Prometheus | Mimir | O2 · Parquet | O2 · Vortex |
 | --- | --- | --- | --- | --- |
-| irate | 10,991 | 8,814 | 1,076 | **980** |
-| Unfiltered histogram | 268,419 | 255,386 | **46,645** | 46,833 |
-| Histogram, regex filter | 4,798 | 4,416 | 7,950 | **2,422** |
-| Histogram, equality filter | 4,770 | 4,417 | 7,846 | **2,666** |
+| irate | 10,991 | 8,814 | 1,143 | **1,018** |
+| Unfiltered histogram | 268,419 | 255,386 | 47,785 | **44,398** |
+| Histogram, regex filter | 4,798 | 4,416 | 8,199 | **2,549** |
+| Histogram, equality filter | 4,770 | 4,417 | 7,986 | **2,404** |
 
 ## Parquet vs Vortex
 
@@ -238,9 +238,9 @@ within 10%.
 
 | Filtered histogram, regex (ms) | 30m | 1h | 3h | 6h |
 | --- | --- | --- | --- | --- |
-| Parquet | 654 | 1,133 | 4,356 | 7,950 |
-| Vortex | **229** | **379** | **1,303** | **2,422** |
-| Vortex advantage | 2.9× | 3.0× | 3.3× | **3.3×** |
+| Parquet | 744 | 1,151 | 4,336 | 8,199 |
+| Vortex | **255** | **403** | **1,353** | **2,549** |
+| Vortex advantage | 2.9× | 2.9× | 3.2× | **3.2×** |
 
 At 6h, Parquet is slower than both Prometheus and Mimir on this query while
 Vortex is roughly twice as fast as either. For dashboard-style filtered
@@ -253,17 +253,13 @@ Sampled every 10 minutes across the 8h23m ingestion, at the 28 GB limit.
 | System | CPU (cores, typical) | RSS (steady) | Disk |
 | --- | --- | --- | --- |
 | Prometheus | 1.3–1.9 | 3.2–4.1 GB | 11 GB |
-| Mimir | 0.7–1.1 | 4.5–5.5 GB | 28 GB * |
-| OpenObserve (Parquet) | 1.6–2.2 | **1.5–2.0 GB** | 29 GB |
-| OpenObserve (Vortex) | 1.6–2.0 | **1.5–2.1 GB** | 28 GB |
+| Mimir | 0.7–1.1 | 4.5–5.5 GB | 18 GB |
+| OpenObserve (Parquet) | 1.6–2.2 | **1.5–2.0 GB** | 28 GB |
+| OpenObserve (Vortex) | 1.6–2.0 | **1.5–2.1 GB** | 27 GB |
 
-> \* **Provisional.** These were taken ~2 hours after ingestion stopped, which is
-> long enough for Prometheus and OpenObserve but not for Mimir — its compactor
-> holds superseded source blocks for `deletion_delay: 12h`, so its volume was
-> still carrying both the merged blocks and their sources. It read 21.6 GB at
-> the moment of stop, rose to 29.5 GB during compaction, and will not settle
-> until ~14 hours after the last write. See
-> [When disk usage settles](#when-disk-usage-settles).
+> Disk was measured **14.8 hours after the last write**, once every system's
+> compaction and cleanup had finished. Read too early it is a different number
+> entirely — see [When disk usage settles](#when-disk-usage-settles).
 
 **Memory is where the systems differ most, and it is not close.** OpenObserve
 holds 1.5–2.1 GB and stays flat for the entire eight hours. Prometheus and Mimir
@@ -299,7 +295,17 @@ and the wait is not the same for every system:
 
 Watched live across this run, Mimir's volume went **up** after the writes
 stopped — 21.6 GB at 21:10, 29.5 GB by 22:23 — because the compactor writes the
-merged block first and keeps the sources for half a day.
+merged block first and keeps the sources for half a day. It came back down to
+**18 GB** only once `deletion_delay` expired:
+
+| Measured at | Prometheus | Mimir | O2 · Parquet | O2 · Vortex |
+| --- | --- | --- | --- | --- |
+| stop + 2h | 11 GB | **28 GB** | 29 GB | 28 GB |
+| stop + 14.8h | 11 GB | **18 GB** | 28 GB | 27 GB |
+| ratio, O2 · Parquet vs | 2.5× | **1.0× → 1.6×** | — | — |
+
+Only Mimir moves. Taken early, its disk looks the same size as OpenObserve's;
+settled, OpenObserve uses 1.6× more.
 
 Neither of Mimir's timers can usefully be shortened. Its volume holds two copies
 of the data: the filesystem bucket, whose superseded blocks the compactor keeps
@@ -311,8 +317,8 @@ makes queries silently return incomplete results, a far worse failure than an
 inflated disk number.
 
 **Measuring early biases the comparison towards OpenObserve**, by inflating the
-systems it is compared against. Wait ~14 hours, or say your disk figures are
-provisional — as the table above does.
+systems it is compared against. Wait ~14 hours after the last write, or label
+the figures provisional.
 
 ## Reproducing
 
