@@ -1,0 +1,91 @@
+# Formats and mounts each perf node's instance-store NVMe at /mnt/k8s-disks/0.
+#
+# Needed because the EKS AL2023 `localStorage.strategy: RAID0` nodeadm setting
+# did not take effect on these nodes: the device is present but has no
+# filesystem and is not mounted. Left alone, hostPath volumes would silently
+# create their directories on the 100G root EBS volume instead, and the
+# benchmark would measure gp3 while claiming to measure NVMe.
+#
+# A DaemonSet rather than manual mounts: it is idempotent, and it re-runs when
+# a node is replaced -- which for instance storage is not a rare event.
+#
+#   kubectl apply -f mount-nvme.yaml
+#   kubectl -n kube-system rollout status ds/mount-nvme --timeout=5m
+#
+# APPLY THIS BEFORE THE SYSTEMS UNDER TEST. A pod that starts first binds its
+# hostPath to the pre-mount directory and keeps that stale view after the
+# device is mounted underneath.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: mount-nvme
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: mount-nvme
+  template:
+    metadata:
+      labels:
+        app: mount-nvme
+    spec:
+      # Only the benchmark nodes. Everything else in the cluster keeps its
+      # own storage arrangement.
+      nodeSelector:
+        node.kubernetes.io/instance-type: m7gd.2xlarge
+      tolerations:
+        - key: perf
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+      hostPID: true
+      containers:
+        - name: mount
+          image: public.ecr.aws/docker/library/busybox:1.36.1
+          securityContext:
+            privileged: true
+          # Everything runs via `nsenter -t 1 -m` so it happens in the HOST
+          # mount namespace -- that is what makes the mount visible to other
+          # pods' hostPath volumes, and it also means the host's mkfs/mount
+          # binaries are used rather than busybox's.
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              TARGET=/mnt/k8s-disks/0
+              h() { nsenter -t 1 -m -u -i -n -- "$@"; }
+
+              DEV=$(h lsblk -dn -o NAME,MODEL \
+                    | grep -i 'Instance Storage' | awk '{print $1}' | head -1)
+              if [ -z "$DEV" ]; then
+                echo "FATAL: no instance-store device on this node"
+                echo "The instance type may not have one, or it is already in use."
+                exit 1
+              fi
+              DEV=/dev/$DEV
+              echo "instance-store device: $DEV"
+
+              if h mountpoint -q "$TARGET"; then
+                echo "$TARGET already mounted, nothing to do"
+              else
+                FS=$(h blkid -o value -s TYPE "$DEV" 2>/dev/null || true)
+                if [ -z "$FS" ]; then
+                  echo "no filesystem on $DEV -- creating xfs"
+                  h mkfs.xfs -f "$DEV"
+                else
+                  echo "existing $FS filesystem on $DEV -- keeping it"
+                fi
+                h mkdir -p "$TARGET"
+                h mount "$DEV" "$TARGET"
+                echo "mounted $DEV at $TARGET"
+              fi
+
+              # Prove it: this must show the ~441G device, not the 100G root.
+              h df -h "$TARGET"
+
+              # Stay alive so the DaemonSet reports Ready and re-runs on reboot.
+              sleep infinity
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 200m, memory: 128Mi}

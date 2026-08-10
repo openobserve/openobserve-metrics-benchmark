@@ -113,6 +113,18 @@ spec:
         operator: Equal
         value: "true"
         effect: NoSchedule
+      initContainers:
+      # hostPath directories are created root-owned; fsGroup does not apply to
+      # them, so hand the volume to the uid the container actually runs as.
+      - name: chown-data
+        image: public.ecr.aws/docker/library/busybox:1.36.1
+        command: ['sh', '-c', 'chown -R 10000:2000 /mimir']
+        securityContext:
+          runAsUser: 0
+          runAsNonRoot: false
+        volumeMounts:
+        - mountPath: /mimir
+          name: data
       containers:
       - name: mimir-standalone
         # The published run used grafana/mimir:latest, pulled 2026-08. Pin a
@@ -142,6 +154,13 @@ spec:
       - name: mimir-config
         configMap:
           name: mimir-standalone-config
+      # Instance-store NVMe. See deploy/local-nvme/README.md -- the node must
+      # mount it at /mnt/k8s-disks/0, and the data is EPHEMERAL: a node
+      # replacement loses the whole dataset.
+      - name: data
+        hostPath:
+          path: /mnt/k8s-disks/0/mimir
+          type: DirectoryOrCreate
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       securityContext:
@@ -153,18 +172,6 @@ spec:
     rollingUpdate:
       partition: 0
     type: RollingUpdate
-  volumeClaimTemplates:
-  - apiVersion: v1
-    kind: PersistentVolumeClaim
-    metadata:
-      name: data
-    spec:
-      accessModes:
-      - ReadWriteOnce
-      resources:
-        requests:
-          storage: 500Gi
-      volumeMode: Filesystem
 ---
 apiVersion: v1
 kind: Service

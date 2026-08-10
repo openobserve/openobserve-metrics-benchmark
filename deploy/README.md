@@ -1,18 +1,53 @@
 # deploy/
 
-Six components. Install in the order below — the collector must be last,
-because its exporters point at the other four Services.
-
 ```bash
-./prometheus/install.sh
-./mimir/install.sh
-./openobserve-parquet/install.sh
-./openobserve-vortex/install.sh
-./fake-webserver/install.sh
-./otel-collector/install.sh
+./install-all.sh                                     # 1 · NVMe + the four systems
+INSTALL_LOAD=1 ./install-all.sh                      # 2 · + the load
+INSTALL_LOAD=1 INSTALL_COLLECTOR=1 ./install-all.sh  # 3 · + the collector
 ```
 
-`./install-all.sh` runs exactly that sequence.
+Each step is a no-op if already done, so re-running with the next flag is safe.
+
+**Step 1 stops before any load.** That is the point: once `fake-webserver` is
+up every system is being written to and the run has started, so it is worth
+confirming all four are healthy first. `install-all.sh` prints what to check.
+
+**`local-nvme` always runs first** — a system that starts before the mount
+exists writes to the root EBS volume while appearing to use NVMe, and nothing
+surfaces the mistake. See [Storage](#storage).
+
+**Ready is not steady.** WAL replay, block loading and the first compaction all
+happen after the readiness probe passes, and load applied during that window
+hits each system in a different state — the comparison is only clean if all
+four see identical input from the first sample. `STABILIZE_SECS` (default 120)
+is the pause before the load starts.
+
+## The collector is opt-in
+
+`install-all.sh` deliberately does **not** install `otel-collector/`. That
+script runs `helm upgrade --install -f collector-values.yaml`, which replaces
+the release's values wholesale — and this repo's values file is the stripped,
+benchmark-only version. On a cluster whose collector also carries other
+telemetry, running it silently deletes those pipelines.
+
+If the collector exists solely for this benchmark:
+
+```bash
+INSTALL_COLLECTOR=1 ./install-all.sh
+```
+
+If it is shared, edit the live values instead and add only what the benchmark
+needs — the four `prometheusremotewrite` exporters and the single
+`metrics/perf_fakeserver` pipeline from `otel-collector/collector-values.yaml`:
+
+```bash
+helm -n openobserve-collector get values o2c > /tmp/o2c.yaml
+# merge in the four exporters + the pipeline
+helm -n openobserve-collector upgrade o2c openobserve/openobserve-collector -f /tmp/o2c.yaml
+```
+
+Nothing reaches the four systems until some collector scrapes
+`perf-fakeserver` and writes to them.
 
 ## The four systems under test
 
@@ -29,8 +64,8 @@ rather than a hostname.
 ## Sizing
 
 **7 CPU / 28G, requests == limits** (Guaranteed QoS) on a dedicated
-`m7g.2xlarge` tainted `perf=true:NoSchedule`, plus a **500Gi** PVC — identical
-for all four.
+`m7gd.2xlarge` tainted `perf=true:NoSchedule`, writing to that node's
+**instance-store NVMe** — identical for all four. See [Storage](#storage).
 
 `28G` is decimal (26.08 GiB). Do not "correct" it to `28Gi`: that exceeds the
 node's 29.79 GiB allocatable and the pod sits `Pending`.
@@ -132,35 +167,77 @@ custom resources, so the operator has to exist first.
 
 ## Storage
 
-Every PVC requests 500Gi from the **default StorageClass**. The published run
-uses gp3 at its default profile (3000 IOPS / 125 MB/s), which is what produces
-the cold-query behaviour discussed in the article. To pin it explicitly, create
-a StorageClass and set `persistence.storageClass` in the two OpenObserve values
-files and `storageClassName` in the two StatefulSets:
+Each system writes to its node's **instance-store NVMe** via a `hostPath` at
+`/mnt/k8s-disks/0/<system>`, so disk speed is not a variable in the comparison.
+There are no PVCs.
+
+**The data is ephemeral.** Instance store is lost whenever the node stops, is
+replaced, or is reclaimed. A dataset that took hours to ingest disappears with
+the node. Use on-demand capacity and keep the perf nodes undisrupted.
+
+### The mount
+
+`local-nvme/mount-nvme.yaml` is a DaemonSet that formats the instance-store
+device as xfs and mounts it at `/mnt/k8s-disks/0`. It is idempotent — an
+existing mount or filesystem is left alone — and it re-runs when a node is
+replaced.
+
+It exists because the EKS AL2023 nodeadm setting that is supposed to do this,
 
 ```yaml
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: gp3
-provisioner: ebs.csi.aws.com
-volumeBindingMode: WaitForFirstConsumer
-allowVolumeExpansion: true
-parameters:
-  type: gp3
+apiVersion: node.eks.aws/v1alpha1
+kind: NodeConfig
+spec:
+  instance:
+    localStorage:
+      strategy: RAID0
 ```
 
-`volumeClaimTemplates` is immutable. Changing a size or class later means
-deleting the StatefulSet **and** its PVC and re-applying — `kubectl apply` alone
-will not do it.
+did not take effect on these nodes: `/dev/nvme1n1` was present but had no
+filesystem and was not mounted. If it works for you, the DaemonSet finds the
+mount already in place and does nothing.
+
+### Why the ordering matters
+
+**Apply the DaemonSet before the systems under test.** A pod that starts first
+binds its `hostPath` to the directory that exists at that moment and keeps that
+view after the device is mounted underneath — it will happily write to the
+100 GB root EBS volume for the whole run. Nothing surfaces the mistake: the
+benchmark completes and reports numbers for the wrong disk. `install-all.sh`
+enforces the ordering and refuses to continue if any node's
+`/mnt/k8s-disks/0` is not backed by `/dev/nvme*`.
+
+Check it any time, during ingestion especially — `Used` should be climbing:
+
+```bash
+kubectl -n kube-system exec ds/mount-nvme -- \
+  nsenter -t 1 -m -- df -h /mnt/k8s-disks/0
+```
+
+### Using EBS instead
+
+To go back to network storage, replace each `hostPath` volume with a
+`volumeClaimTemplates` entry (Prometheus and Mimir) and set
+`persistence.enabled: true` with a `storageClass` in the two OpenObserve values
+files. Note that gp3's default profile is 3000 IOPS / 125 MB/s regardless of
+volume size, and that `volumeClaimTemplates` is immutable — changing a size or
+class later means deleting the StatefulSet **and** its PVC.
 
 ## Teardown
 
 ```bash
 kubectl delete ns perf-prometheus perf-mimir perf-o2-parquet perf-o2-vortex perf-fakeserver
 helm -n openobserve-collector uninstall o2c
+kubectl delete -f local-nvme/mount-nvme.yaml
 ```
 
-Deleting the namespaces releases the four 500Gi volumes. Check that they
-actually went — `kubectl get pv` — since a `Retain` reclaim policy will keep
-billing you.
+There are no PVs or PVCs to clean up. The data sits on the nodes' instance
+store and goes away with them, but it is **not** removed by deleting the
+namespaces — the directories under `/mnt/k8s-disks/0` survive. A fresh run on
+the same nodes therefore starts on top of the previous run's files. Clear them
+first:
+
+```bash
+kubectl -n kube-system exec ds/mount-nvme -- \
+  nsenter -t 1 -m -- sh -c 'rm -rf /mnt/k8s-disks/0/{prometheus,mimir,o2-parquet,o2-vortex}'
+```

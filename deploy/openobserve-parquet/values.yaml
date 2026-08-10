@@ -41,20 +41,23 @@ securityContext: {}
 cache:
   enabled: false
 
+# Off: the chart only offers a PVC or an emptyDir, and we want the node's
+# instance-store NVMe. ZO_DATA_DIR below points at a hostPath instead, so the
+# chart's /data emptyDir is left unused. See deploy/local-nvme/README.md.
 persistence:
-  enabled: true
-  # Primary data store (WAL + data + sqlite meta), 500Gi to match the others.
-  size: 500Gi
-  # Empty = cluster default. gp3's 125 MB/s is what drives cold-query times.
-  storageClass: ""
-  accessModes:
-    - ReadWriteOnce
-  annotations: {}
-  volumePermissions:
-    enabled: false
+  enabled: false
 
-extraVolumeMounts: []
-extraVolumes: []
+# Instance-store NVMe. The data is EPHEMERAL: a node replacement loses the
+# whole dataset. The pod runs as root (podSecurityContext above), so the
+# root-owned hostPath directory needs no chown init container.
+extraVolumeMounts:
+  - name: nvme
+    mountPath: /nvme
+extraVolumes:
+  - name: nvme
+    hostPath:
+      path: /mnt/k8s-disks/0/o2-parquet
+      type: DirectoryOrCreate
 
 headless:
   enabled: true
@@ -92,7 +95,7 @@ config:
   # Both required: ZO_LOCAL_MODE_STORAGE only applies while ZO_LOCAL_MODE=true.
   ZO_LOCAL_MODE: "true"
   ZO_LOCAL_MODE_STORAGE: "disk"
-  ZO_DATA_DIR: "./data/"
+  ZO_DATA_DIR: "/nvme/"
   ZO_UI_ENABLED: "true"
   # Only needed if you expose the UI; empty is fine behind port-forward.
   ZO_WEB_URL: ""

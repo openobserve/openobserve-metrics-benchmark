@@ -1,3 +1,5 @@
-# Benchmark output. Commit a run deliberately with `git add -f` if you want to
-# publish it; day-to-day runs stay local.
-results/*/
+# Benchmark output stays local: run directories, monitoring logs, ad-hoc
+# snapshots. The published numbers live in RESULTS.md, not here.
+# Commit a run deliberately with `git add -f` if you want to publish it.
+results/*
+!results/.gitkeep
