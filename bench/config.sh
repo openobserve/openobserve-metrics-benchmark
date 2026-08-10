@@ -47,17 +47,27 @@ SYSTEMS=(
 # `./cardinality.sh paths` lists what your deployment actually produced.
 : "${PATH_FILTER:=/api/service-1}"
 
-# Query windows, in seconds: 30m, 1h, 3h.
-: "${WINDOWS:=1800 3600 10800}"
+# Query windows, in seconds: 30m, 1h, 3h, 6h.
+: "${WINDOWS:=1800 3600 10800 21600}"
 
 # Resolution step for query_range.
 #
-# NOT pinned by the published article. 15s matches the scrape interval, so the
-# number of returned points scales linearly with the window -- which is what the
-# article's near-linear latency growth implies was used. If you change it,
-# change it for every system and say so when you publish numbers: step is the
-# single biggest lever on absolute latency in this whole benchmark.
-: "${STEP:=15s}"
+# Empty (the default) means "compute it per window the way Grafana does":
+#
+#   step = max(MIN_INTERVAL, range / MAX_DATA_POINTS), rounded up to a tidy
+#   interval
+#
+# A fixed 15s makes the point count grow linearly with the window -- 1440
+# points at 6h -- which no dashboard would ever ask for, because Grafana caps
+# requests at roughly the panel width in pixels. Under this rule 30m/1h/3h all
+# still land on 15s (the scrape interval floors them) and only 6h widens to
+# 30s, holding the response at 720 points.
+#
+# Set STEP explicitly to pin one value for every window instead. Step is the
+# single biggest lever on absolute latency here, so publish whichever you used.
+: "${STEP:=}"
+: "${MAX_DATA_POINTS:=1000}"
+: "${MIN_INTERVAL:=15}"
 
 # Runs per (system, query, window). The article reports all three raw values.
 : "${RUNS:=3}"
@@ -71,7 +81,7 @@ SYSTEMS=(
 # Cells getting ONE recorded run instead of RUNS, as `query-id:window`. A 3h
 # unfiltered request costs minutes (Mimir: 351s) and its spread is dominated by
 # scan volume, not run-to-run noise. Run 0 still happens.
-: "${SINGLE_RUN_CELLS:=histogram-unfiltered:3h}"
+: "${SINGLE_RUN_CELLS:=histogram-unfiltered:3h histogram-unfiltered:6h}"
 
 # End of the query range, RFC3339 or a unix timestamp. Default: 5 minutes ago,
 # so the newest data is already flushed everywhere. Pin an absolute value when
@@ -112,6 +122,22 @@ human_window() {
     1800)  echo "30m" ;;
     3600)  echo "1h"  ;;
     10800) echo "3h"  ;;
+    21600) echo "6h"  ;;
     *)     echo "$(( $1 / 60 ))m" ;;
   esac
+}
+
+# The intervals Grafana will actually round up to.
+TIDY_INTERVALS="1 2 5 10 15 20 30 60 120 300 600 900 1200 1800 3600 7200 10800 21600 43200 86400"
+
+# step_for_window <range_seconds> -> e.g. "15s"
+step_for_window() {
+  if [[ -n "${STEP}" ]]; then echo "${STEP}"; return; fi
+  local raw=$(( $1 / MAX_DATA_POINTS ))
+  (( raw < MIN_INTERVAL )) && raw="${MIN_INTERVAL}"
+  local i
+  for i in ${TIDY_INTERVALS}; do
+    (( i >= raw )) && { echo "${i}s"; return; }
+  done
+  echo "86400s"
 }

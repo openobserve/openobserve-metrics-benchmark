@@ -29,7 +29,7 @@ QUERY_LABEL = {
     "histogram-regex": "3 · Filtered histogram (regex match)",
     "histogram-equality": "4 · Filtered histogram (equality match)",
 }
-WINDOW_ORDER = ["30m", "1h", "3h"]
+WINDOW_ORDER = ["30m", "1h", "3h", "6h"]
 
 
 def load(path):

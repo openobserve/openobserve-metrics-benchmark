@@ -144,7 +144,7 @@ systems' AZ, runs the driver against ClusterIP DNS, and copies
 
 ```bash
 RUNS=5 WINDOWS="1800 3600" ./run-in-cluster.sh
-O2_PARQUET_NS=perf-o21 O2_VORTEX_NS=perf-o22 ./run-in-cluster.sh
+O2_PARQUET_NS=my-parquet-ns O2_VORTEX_NS=my-vortex-ns ./run-in-cluster.sh
 ./run-in-cluster.sh --delete     # remove the runner pod
 ```
 

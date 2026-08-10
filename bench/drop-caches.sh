@@ -16,7 +16,7 @@ set -euo pipefail
 
 # Namespaces default to what deploy/ installs, but are overridable for a
 # deployment that drifted:
-#   O2_PARQUET_NS=perf-o21 O2_VORTEX_NS=perf-o22 ./drop-caches.sh o2-parquet
+#   O2_PARQUET_NS=my-parquet-ns O2_VORTEX_NS=my-vortex-ns ./drop-caches.sh o2-parquet
 : "${PROM_NS:=perf-prometheus}"
 : "${MIMIR_NS:=perf-mimir}"
 : "${O2_PARQUET_NS:=perf-o2-parquet}"

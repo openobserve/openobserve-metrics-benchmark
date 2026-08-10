@@ -38,7 +38,7 @@
 #   ./run-in-cluster.sh
 #   RUNS=5 WINDOWS="1800 3600" ./run-in-cluster.sh
 #   END_TIME=2026-08-06T03:00:00+08:00 ./run-in-cluster.sh
-#   O2_PARQUET_NS=perf-o21 O2_VORTEX_NS=perf-o22 ./run-in-cluster.sh
+#   O2_PARQUET_NS=my-parquet-ns O2_VORTEX_NS=my-vortex-ns ./run-in-cluster.sh
 #
 #   ./run-in-cluster.sh --script cardinality.sh         # any bench/ script
 #   ./run-in-cluster.sh --script cardinality.sh paths   # ...with its own args
@@ -96,6 +96,23 @@ kexec_ok() {
   done
   echo "error: 'kubectl exec ... $1' failed 5 times against ${BENCH_NS}/${BENCH_POD}" >&2
   return 1
+}
+
+# Container restart state for the systems under test. Sampled before and after
+# the run: a pod that was OOMKilled mid-benchmark shows up as a changed restart
+# count, and `curl` alone cannot tell that apart from a network failure -- both
+# surface as http_code 000. The benchmark itself runs in a pod with no kubectl
+# and no RBAC, so this has to happen out here.
+pod_states() {
+  local ns sts
+  for entry in "${PROM_NS}|prometheus-standalone-0" \
+               "${MIMIR_NS}|mimir-standalone-0" \
+               "${O2_PARQUET_NS}|o2-openobserve-standalone-0" \
+               "${O2_VORTEX_NS}|o2-openobserve-standalone-0"; do
+    IFS='|' read -r ns sts <<< "${entry}"
+    kubectl -n "${ns}" get pod "${sts}" -o jsonpath="${ns} restarts={.status.containerStatuses[0].restartCount} lastReason={.status.containerStatuses[0].lastState.terminated.reason} lastExit={.status.containerStatuses[0].lastState.terminated.exitCode} finishedAt={.status.containerStatuses[0].lastState.terminated.finishedAt}{'\n'}" 2>/dev/null \
+      || echo "${ns} (unavailable)"
+  done
 }
 
 SCRIPT="run-benchmark.sh"
@@ -306,6 +323,8 @@ for arg in ${SCRIPT_ARGS[@]+"${SCRIPT_ARGS[@]}"}; do
   remote_cmd+=" $(printf '%q' "${arg}")"
 done
 
+PODS_BEFORE="$(pod_states)"
+
 echo "==> running ${SCRIPT} in-cluster (detached; safe to Ctrl-C this tail)"
 echo
 
@@ -391,14 +410,48 @@ fi
 mkdir -p ../results
 kexec tar cf - -C "${REMOTE_DIR}/results" "${stamp}" | tar xf - -C ../results
 
+# Anything that restarted during the run gets recorded next to the CSV. An
+# OOMKill is a result -- "this system cannot answer that query in this memory
+# envelope" -- and must not be filed as a connection error.
+{
+  echo "# container state before / after the run"
+  echo "## before"; echo "${PODS_BEFORE}"
+  echo "## after";  pod_states
+} > "../results/${stamp}/pod-state.txt"
+
+# `|| true` on every branch: under `set -e` + `pipefail` a diff that finds
+# differences exits 1 and would abort the script HERE -- after the benchmark
+# succeeded and the results were copied back, but before the closing messages.
+# A restart is something to report, not a reason to fail the run.
+if ! diff <(echo "${PODS_BEFORE}") <(pod_states) >/dev/null 2>&1; then
+  {
+    echo
+    echo "==> WARNING: a system under test restarted during this run"
+    diff <(echo "${PODS_BEFORE}") <(pod_states) 2>/dev/null | grep '^>' \
+      | sed 's/^> /    /' || true
+    echo "    see results/${stamp}/pod-state.txt -- correlate finishedAt with"
+    echo "    started_unix in raw.csv to find which request killed it."
+  } >&2 || true
+fi
+
 # Record how this run was measured. A CSV that does not say where it was run
 # from is not comparable to one that does -- that is the whole point here.
-cat >> "../results/${stamp}/run-metadata.txt" <<EOF
-measured_from   in-cluster pod ${BENCH_NS}/${BENCH_POD}
-runner_node     $(kubectl -n "${BENCH_NS}" get pod "${BENCH_POD}" -o jsonpath='{.spec.nodeName}')
-runner_zone     ${BENCH_ZONE:-unpinned}
-transport       ClusterIP Service DNS (no port-forward)
-EOF
+{
+  echo "measured_from   in-cluster pod ${BENCH_NS}/${BENCH_POD}"
+  echo "runner_node     $(kubectl -n "${BENCH_NS}" get pod "${BENCH_POD}" -o jsonpath='{.spec.nodeName}')"
+  echo "runner_zone     ${BENCH_ZONE:-unpinned}"
+  echo "transport       ClusterIP Service DNS (no port-forward)"
+  # The memory envelope is the variable between benchmark rounds, so a CSV that
+  # does not carry it cannot be told apart from one run at a different limit.
+  for e in "prometheus|${PROM_NS}|prometheus-standalone-0" \
+           "mimir|${MIMIR_NS}|mimir-standalone-0" \
+           "o2-parquet|${O2_PARQUET_NS}|o2-openobserve-standalone-0" \
+           "o2-vortex|${O2_VORTEX_NS}|o2-openobserve-standalone-0"; do
+    IFS='|' read -r lbl ns pd <<< "${e}"
+    echo "mem_limit_${lbl}  $(kubectl -n "${ns}" get pod "${pd}" \
+      -o jsonpath='{.spec.containers[0].resources.limits.memory}' 2>/dev/null || echo '?')"
+  done
+} >> "../results/${stamp}/run-metadata.txt"
 
 echo
 echo "==> results: results/${stamp}/"

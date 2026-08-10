@@ -34,19 +34,27 @@ INTERVAL="${2:-60}"
 
 # Namespaces default to what deploy/ installs, but are overridable for a
 # deployment that drifted:
-#   O2_PARQUET_NS=perf-o21 O2_VORTEX_NS=perf-o22 ./resources.sh
+#   O2_PARQUET_NS=my-parquet-ns O2_VORTEX_NS=my-vortex-ns ./resources.sh
 : "${PROM_NS:=perf-prometheus}"
 : "${MIMIR_NS:=perf-mimir}"
 : "${O2_PARQUET_NS:=perf-o2-parquet}"
 : "${O2_VORTEX_NS:=perf-o2-vortex}"
 
-# label|namespace|statefulset
+# label|namespace|statefulset|data dir under ${NVME_MOUNT}
 TARGETS=(
-  "prometheus|${PROM_NS}|prometheus-standalone"
-  "mimir|${MIMIR_NS}|mimir-standalone"
-  "o2-parquet|${O2_PARQUET_NS}|o2-openobserve-standalone"
-  "o2-vortex|${O2_VORTEX_NS}|o2-openobserve-standalone"
+  "prometheus|${PROM_NS}|prometheus-standalone|prometheus"
+  "mimir|${MIMIR_NS}|mimir-standalone|mimir"
+  "o2-parquet|${O2_PARQUET_NS}|o2-openobserve-standalone|o2-parquet"
+  "o2-vortex|${O2_VORTEX_NS}|o2-openobserve-standalone|o2-vortex"
 )
+
+# Disk comes from the node, not from kubelet: the systems write to a hostPath
+# on the instance store, and kubelet only reports usage for PVC-backed volumes.
+# The mount-nvme DaemonSet already has a pod on every benchmark node, so borrow
+# it to du the directory in the host mount namespace.
+: "${NVME_MOUNT:=/mnt/k8s-disks/0}"
+: "${NVME_DS_NS:=kube-system}"
+: "${NVME_DS_LABEL:=app=mount-nvme}"
 
 STATS="$(mktemp)"
 trap 'rm -f "${STATS}"' EXIT
@@ -54,7 +62,7 @@ trap 'rm -f "${STATS}"' EXIT
 snapshot() {
   printf '%-12s %10s %11s %11s %11s   %s\n' "system" "cpu(cores)" "rss" "workset" "disk" "pod"
   for entry in "${TARGETS[@]}"; do
-    IFS='|' read -r label ns sts <<< "${entry}"
+    IFS='|' read -r label ns sts datadir <<< "${entry}"
     pod="${sts}-0"
 
     node="$(kubectl -n "${ns}" get pod "${pod}" -o jsonpath='{.spec.nodeName}' 2>/dev/null || true)"
@@ -63,16 +71,25 @@ snapshot() {
       continue
     fi
 
+    disk_bytes=""
+    dspod="$(kubectl -n "${NVME_DS_NS}" get pods -l "${NVME_DS_LABEL}" \
+      --field-selector "spec.nodeName=${node}" -o name 2>/dev/null | head -1)"
+    if [[ -n "${dspod}" ]]; then
+      disk_bytes="$(kubectl -n "${NVME_DS_NS}" exec "${dspod}" -- nsenter -t 1 -m -- \
+        du -sb "${NVME_MOUNT}/${datadir}" 2>/dev/null | awk '{print $1}')"
+    fi
+
     # Land the kubelet response in a file and pass its PATH to python.
     # `kubectl ... | python3 - args <<'PY'` does NOT work: the heredoc becomes
     # python's stdin and silently overrides the pipe, so json.load(sys.stdin)
     # sees an exhausted stream and every row reads "kubelet stats unavailable".
     kubectl get --raw "/api/v1/nodes/${node}/proxy/stats/summary" \
       > "${STATS}" 2>/dev/null
-    python3 - "${label}" "${ns}" "${pod}" "${STATS}" <<'PY'
+    python3 - "${label}" "${ns}" "${pod}" "${STATS}" "${disk_bytes:--}" <<'PY'
 import json, sys
 
 label, ns, pod_name, stats_path = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+disk = int(sys.argv[5]) if sys.argv[5].isdigit() else None
 
 def human(n):
     if n is None:
@@ -99,14 +116,6 @@ for pod in summary.get("pods", []):
     memstats = pod.get("memory") or {}
     rss = memstats.get("rssBytes")
     workset = memstats.get("workingSetBytes")
-
-    # The data PVC is always named data-<statefulset>-N.
-    disk = None
-    for vol in pod.get("volume", []):
-        pvc = (vol.get("pvcRef") or {}).get("name", "")
-        if pvc.startswith("data-"):
-            disk = vol.get("usedBytes")
-            break
 
     print(f"{label:<12} {cpu_s:>10} {human(rss):>11} {human(workset):>11} "
           f"{human(disk):>11}   {pod_name}")

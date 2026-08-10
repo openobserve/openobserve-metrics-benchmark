@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# Runs the four PromQL queries against all four systems, over three windows,
-# three times each: 4 x 4 x 3 x 3 = 144 requests.
+# Runs the four PromQL queries against all four systems, over every window in
+# WINDOWS, RUNS times each plus one cold run 0 -- with the unfiltered histogram
+# recorded once on the widest windows (see SINGLE_RUN_CELLS).
+#
+# The step is computed per window the way Grafana does, not pinned at 15s; see
+# config.sh.
 #
 # Writes a CSV of every individual request to results/<timestamp>/raw.csv and
 # prints a median summary at the end.
@@ -31,7 +35,7 @@ RAW="${OUTDIR}/raw.csv"
 BODY="$(mktemp)"
 trap 'rm -f "${BODY}"' EXIT
 
-echo "query,window,system,run,http_code,latency_ms,series,error" > "${RAW}"
+echo "query,window,step,system,run,started_unix,http_code,latency_ms,series,error" > "${RAW}"
 
 # Record exactly what was run, so a CSV is never orphaned from its parameters.
 cat > "${OUTDIR}/run-metadata.txt" <<EOF
@@ -39,7 +43,7 @@ started_utc     $(date -u +%Y-%m-%dT%H:%M:%SZ)
 end_time_unix   ${END_TS}
 end_time_utc    $(python3 -c "import datetime,sys;print(datetime.datetime.fromtimestamp(int(sys.argv[1]),datetime.timezone.utc).isoformat())" "${END_TS}")
 windows_sec     ${WINDOWS}
-step            ${STEP}
+step            ${STEP:-per-window (Grafana rule: max(${MIN_INTERVAL}s, range/${MAX_DATA_POINTS}), rounded up)}
 runs            ${RUNS}
 warmup          ${WARMUP} (unrecorded requests per cell before the recorded runs)
 path_filter     ${PATH_FILTER}
@@ -50,7 +54,7 @@ o2_vortex       ${O2_VORTEX_BASE}
 EOF
 
 echo "==> end of range: ${END_TS} ($(python3 -c "import datetime,sys;print(datetime.datetime.fromtimestamp(int(sys.argv[1])).isoformat())" "${END_TS}") local)"
-echo "==> step=${STEP} runs=${RUNS} path=${PATH_FILTER}"
+echo "==> step=${STEP:-per-window} runs=${RUNS} path=${PATH_FILTER}"
 echo "==> writing ${RAW}"
 echo
 
@@ -80,7 +84,8 @@ csv_escape() { printf '"%s"' "${1//\"/\"\"}"; }
 # (qid, label, sys, base, auth_args, promql, start_ts, run) from the enclosing
 # scope; `run` is 0 for the cold first-touch request.
 do_request() {
-  local timing http_code secs ms series errmsg parsed
+  local timing http_code secs ms series errmsg parsed started
+  started="$(date +%s)"
 
   # %{time_total} is the full request wall time as seen by the client.
   # ${arr[@]+"${arr[@]}"} is the portable way to expand a possibly-empty array
@@ -95,7 +100,7 @@ do_request() {
     --data-urlencode "query=${promql}" \
     --data-urlencode "start=${start_ts}" \
     --data-urlencode "end=${END_TS}" \
-    --data-urlencode "step=${STEP}" \
+    --data-urlencode "step=${step}" \
     "${base}/api/v1/query_range" 2>/dev/null)" || true
   [[ "${timing}" == *" "* ]] || timing="000 0"
 
@@ -121,9 +126,9 @@ do_request() {
     printf '%s%s ' "$([[ "${run}" == "0" ]] && echo '~' || true)" "${ms}"
   fi
 
-  printf '%s,%s,%s,%s,%s,%s,%s,%s\n' \
-    "${qid}" "${label}" "${sys}" "${run}" "${http_code}" "${ms}" "${series}" \
-    "$(csv_escape "${errmsg}")" >> "${RAW}"
+  printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
+    "${qid}" "${label}" "${step}" "${sys}" "${run}" "${started}" "${http_code}" "${ms}" \
+    "${series}" "$(csv_escape "${errmsg}")" >> "${RAW}"
 }
 
 for qid in "${QUERY_IDS[@]}"; do
@@ -135,12 +140,13 @@ for qid in "${QUERY_IDS[@]}"; do
   for win in ${WINDOWS}; do
     start_ts=$(( END_TS - win ))
     label="$(human_window "${win}")"
+    step="$(step_for_window "${win}")"
 
     for entry in "${SYSTEMS[@]}"; do
       IFS='|' read -r sys base auth <<< "${entry}"
       [[ -n "${SYSTEMS_FILTER}" && "${sys}" != *"${SYSTEMS_FILTER}"* ]] && continue
 
-      printf '    %-6s %-12s ' "${label}" "${sys}"
+      printf '    %-6s %-5s %-12s ' "${label}" "${step}" "${sys}"
 
       auth_args=()
       [[ -n "${auth}" ]] && auth_args=(--user "${auth}")
