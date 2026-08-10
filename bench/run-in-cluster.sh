@@ -247,9 +247,12 @@ echo "==> runner: $(kubectl -n "${BENCH_NS}" get pod "${BENCH_POD}" \
 # -----------------------------------------------------------------------------
 echo "==> copying bench/ to ${REMOTE_DIR}/bench"
 kexec_ok sh -c "rm -rf ${REMOTE_DIR}/bench && mkdir -p ${REMOTE_DIR}/bench ${REMOTE_DIR}/results"
-tar cf - ./*.sh ./summarize.py \
+# experiments/ carries the one-off studies and is shipped too, so that
+# `--script experiments/foo.sh` works the same way as a top-level script.
+tar cf - ./*.sh ./summarize.py $([[ -d ./experiments ]] && echo ./experiments) \
   | kubectl -n "${BENCH_NS}" exec -i "${BENCH_POD}" -- tar xf - -C "${REMOTE_DIR}/bench"
-kexec_ok sh -c "chmod +x ${REMOTE_DIR}/bench/*.sh ${REMOTE_DIR}/bench/summarize.py"
+kexec_ok sh -c "chmod +x ${REMOTE_DIR}/bench/*.sh ${REMOTE_DIR}/bench/summarize.py; \
+  [ -d ${REMOTE_DIR}/bench/experiments ] && chmod +x ${REMOTE_DIR}/bench/experiments/*.sh || true"
 
 # -----------------------------------------------------------------------------
 # 3. Run
@@ -262,8 +265,14 @@ envs=(
 )
 # Forward the knobs from config.sh, but only the ones actually set here, so the
 # defaults in config.sh stay in charge of everything else.
+#
+# PASS_ENV carries anything else a --script needs; the experiments under
+# bench/experiments/ take their own knobs and would otherwise be unreachable
+# from out here:
+#
+#   START=... HOUR=300 PASS_ENV="START HOUR" ./run-in-cluster.sh --script ...
 for v in O2_USER O2_PASS PATH_FILTER WINDOWS STEP RUNS WARMUP SINGLE_RUN_CELLS \
-         END_TIME CURL_TIMEOUT SYSTEMS_FILTER QUERY_FILTER; do
+         END_TIME CURL_TIMEOUT SYSTEMS_FILTER QUERY_FILTER ${PASS_ENV:-}; do
   if [[ -n "${!v:-}" ]]; then envs+=("${v}=${!v}"); fi
 done
 
