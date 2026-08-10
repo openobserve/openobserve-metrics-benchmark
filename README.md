@@ -15,7 +15,7 @@ byte-identical data and the same PromQL can be run against all of them.
                                  ├──────────────────────────────┤
   fake-webserver  ──scrape──►    │  Mimir       (single binary) │  7 CPU / 28 GB / NVMe
   24 pods, 15s     OTel      ──► ├──────────────────────────────┤
-  ~1.08M series    Collector     │  OpenObserve ZO_FILE_FORMAT= │  7 CPU / 28 GB / NVMe
+  ~1.09M series    Collector     │  OpenObserve ZO_FILE_FORMAT= │  7 CPU / 28 GB / NVMe
                    (gateway)     │              parquet         │
                                  ├──────────────────────────────┤
                                  │  OpenObserve ZO_FILE_FORMAT= │  7 CPU / 28 GB / NVMe
@@ -29,15 +29,36 @@ nothing is protocol-specific.
 
 ## Results this reproduces
 
-Measured numbers are in [RESULTS.md](RESULTS.md). The headline — 6-hour
-filtered `histogram_quantile` over a 6-hour window, median of the recorded runs:
+Measured numbers are in [RESULTS.md](RESULTS.md). The headline is the query
+that scans everything — `histogram_quantile` over all 1,085,760 bucket series,
+6-hour window, median of the recorded runs:
+
+| System | Latency |
+| --- | --- |
+| Prometheus | 4m 28s |
+| Mimir | 4m 15s |
+| OpenObserve · Parquet | 47.8s |
+| **OpenObserve · Vortex** | **44.4s** |
+
+At stock settings none of the three systems runs this query at all — they
+refuse it on protective defaults. The benchmark raises those limits uniformly
+so the engines decide the outcome instead. See
+[deploy/README.md](deploy/README.md#query-limits).
+
+**Filter to one path out of 54 and the ranking inverts**, splitting the two
+OpenObserve formats. Same window, same step:
 
 | System | Latency (ms) |
 | --- | --- |
-| OpenObserve · Parquet | 7,950 |
+| OpenObserve · Parquet | 8,199 |
 | Prometheus | 4,798 |
 | Mimir | 4,416 |
-| **OpenObserve · Vortex** | **2,422** |
+| **OpenObserve · Vortex** | **2,549** |
+
+Vortex wins by 1.9× over Prometheus; Parquet *loses* to it by 1.7×. A selective
+filter is what Vortex's layout exploits and what a full-scan columnar format
+does not — for dashboard-style filtered work the format choice is worth more
+than the engine choice.
 
 And the result that is not about milliseconds. Run the same benchmark again with
 the memory limit halved to **14 GB**, and almost nothing changes — every cell
@@ -50,7 +71,7 @@ same decision.
 ## What you need
 
 - A Kubernetes cluster with **four dedicated nodes** for the systems under test,
-  plus ordinary capacity for the load generator (24 pods × 128m/64Mi = 3.07 CPU
+  plus ordinary capacity for the load generator (24 pods × 64m/64Mi = 1.54 CPU
   and 1.5GiB of requests) and the collector (1–4 CPU, up to 6Gi).
   Uses `m7gd.2xlarge` (8 vCPU / 32GB / 474 GB NVMe, Graviton/arm64) on EKS.
 - Nodes with local NVMe instance store; `m7gd.2xlarge` gives 474 GB per node.
@@ -67,6 +88,19 @@ Each system must have a node to itself — that is the whole point of the
 
 ```bash
 kubectl taint nodes <node> perf=true:NoSchedule
+```
+
+Then label each node with the system that will own it. Each system's data lives
+on its node's instance store, and `hostPath` is node-local, so every deployment
+selects on this label — **without it the pods stay `Pending`**, and a pod that
+moved to a different perf node would come up with an empty directory and look
+like it had lost all its data:
+
+```bash
+kubectl label node <node-1> perf-system=prometheus
+kubectl label node <node-2> perf-system=mimir
+kubectl label node <node-3> perf-system=o2-parquet
+kubectl label node <node-4> perf-system=o2-vortex
 ```
 
 Every system's pod spec carries the matching toleration. On EKS with `eksctl`:
@@ -121,8 +155,9 @@ bench/run-in-cluster.sh
 
 This runs the measurement from a pod inside the cluster and copies the results
 back. Do not time queries through `port-forward.sh`: the API-server hop puts a
-~1-2 second floor under every request, which compresses the systems together and
-destroys the ratios — it costs the fastest system the most. See
+1,656–2,862ms floor under every request. It is not a constant, so it does not
+just inflate the numbers — it destroys the ratios, and costs the fastest system
+the most. See
 [bench/README.md](bench/README.md#measure-from-inside-the-cluster) for the
 measured comparison.
 
@@ -165,11 +200,14 @@ A/B is contaminated.
 
 Stated plainly, because a reproduction you cannot audit is not a reproduction:
 
-- **`step` was not recorded.** `query_range` needs a resolution step and the
-  article does not pin one. `bench/config.sh` defaults to `STEP=15s`, matching
-  the scrape interval, which is consistent with the near-linear latency growth
-  the article observed. Step is the single biggest lever on absolute latency
-  here — if you publish numbers, publish your step.
+- **The original article did not record its `step`.** `query_range` needs a
+  resolution step and the article pins none, so its absolute latencies cannot be
+  compared directly with anyone else's. This repo computes one per window the
+  way Grafana does — `max(15s, range / 1000)` rounded up — and
+  [RESULTS.md](RESULTS.md#how-the-measurement-is-taken) publishes it. Step is the
+  single biggest lever on absolute latency here: on a fixed 3h window, widening
+  it from 36 to 720 points moved Prometheus 1.68s→3.92s. If you publish numbers,
+  publish your step.
 - **`ZO_METRICS_CACHE_ENABLED` is left at the chart default (`true`).** The
   published run did not set it either, so this repo matches it. If you want a
   strictly cache-free OpenObserve, set it to `false` — in **both** values files.
@@ -195,11 +233,14 @@ Stated plainly, because a reproduction you cannot audit is not a reproduction:
 
 ```
 deploy/
+  install-all.sh       NVMe + the four systems, in order, with verification
+  set-dataset.sh       Point all four at a named dataset on the instance store
+  local-nvme/          DaemonSet that formats and mounts each node's NVMe
   prometheus/          Prometheus v3.6.0, remote-write receiver, scrapes nothing
   mimir/               Mimir single-binary, filesystem blocks storage
   openobserve-parquet/ OpenObserve standalone, ZO_FILE_FORMAT=parquet
   openobserve-vortex/  OpenObserve standalone, ZO_FILE_FORMAT=vortex
-  fake-webserver/      The load generator, 24 replicas (~1.08M bucket series)
+  fake-webserver/      The load generator, 24 replicas (~1.09M bucket series)
   otel-collector/      The scrape + 4-way fan-out. The heart of the setup.
 bench/
   config.sh            Endpoints, windows, step, runs — every knob
@@ -211,8 +252,11 @@ bench/
   resources.sh         CPU / memory / disk per system
   drop-caches.sh       Force a cold query
   port-forward.sh      Local ports — for browsing a UI, never for timing
+  experiments/         One-off studies, not part of the published benchmark
 results/               Your runs land here
 RESULTS.md             Measured results
+RESULTS.html           The same, as a standalone page
+RESULTS.zh.html        Chinese translation
 ```
 
 ## License
