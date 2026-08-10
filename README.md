@@ -11,14 +11,14 @@ byte-identical data and the same PromQL can be run against all of them.
 
 ```
                                  ┌──────────────────────────────┐
-                                 │  Prometheus  v3.6.0          │  7C / 28G / NVMe
+                                 │  Prometheus  v3.6.0          │  7 CPU / 28 GB / NVMe
                                  ├──────────────────────────────┤
-  fake-webserver  ──scrape──►    │  Mimir       (single binary) │  7C / 28G / NVMe
+  fake-webserver  ──scrape──►    │  Mimir       (single binary) │  7 CPU / 28 GB / NVMe
   24 pods, 15s     OTel      ──► ├──────────────────────────────┤
-  ~1.08M series    Collector     │  OpenObserve ZO_FILE_FORMAT= │  7C / 28G / NVMe
+  ~1.08M series    Collector     │  OpenObserve ZO_FILE_FORMAT= │  7 CPU / 28 GB / NVMe
                    (gateway)     │              parquet         │
                                  ├──────────────────────────────┤
-                                 │  OpenObserve ZO_FILE_FORMAT= │  7C / 28G / NVMe
+                                 │  OpenObserve ZO_FILE_FORMAT= │  7 CPU / 28 GB / NVMe
                                  │              vortex          │
                                  └──────────────────────────────┘
 ```
@@ -40,7 +40,7 @@ filtered `histogram_quantile` over a 6-hour window, median of the recorded runs:
 | **OpenObserve · Vortex** | **2,422** |
 
 And the result that is not about milliseconds. Run the same benchmark again with
-the memory limit halved to **14G**, and almost nothing changes — every cell
+the memory limit halved to **14 GB**, and almost nothing changes — every cell
 lands within 5% — *except* that Prometheus is **OOMKilled** on the
 million-series unfiltered histogram at 3h and 6h. That one query peaks at
 18.7 GB RSS in Prometheus against 4.25 GB in Mimir; raising
@@ -62,8 +62,8 @@ same decision.
 
 ### Node setup
 
-Each system must have a node to itself — that is the whole point of the 7C/28G
-Guaranteed-QoS pod sizing. Taint a four-node group so nothing else lands there:
+Each system must have a node to itself — that is the whole point of the
+7 CPU / 28 GB Guaranteed-QoS pod sizing. Taint a four-node group so nothing else lands there:
 
 ```bash
 kubectl taint nodes <node> perf=true:NoSchedule
@@ -148,7 +148,7 @@ running a different benchmark:
 
 | Setting | Value | Reason |
 | --- | --- | --- |
-| Pod resources | 7 CPU / 28G, requests == limits | Guaranteed QoS on a dedicated node: fixed CPU shares, memory never reclaimed |
+| Pod resources | 7 CPU / 28 GB memory, requests == limits | Guaranteed QoS on a dedicated node: fixed CPU shares, memory never reclaimed |
 | Disk | node-local NVMe per system | Same device class everywhere; removes disk speed as a variable |
 | Ingest protocol | `prometheusremotewrite` for all four | OTLP for OpenObserve and remote write for the others would compare different parsers |
 | Mimir write limits | `ingestion_rate` 20M, `max_global_series_per_user` 150M | So writes are never throttled by defaults |
@@ -183,12 +183,13 @@ Stated plainly, because a reproduction you cannot audit is not a reproduction:
   operator's own cluster telemetry to an internal OpenObserve. Those pipelines
   were filtered to exclude `perf-fakeserver` and never touched the systems under
   test, so removing them does not change the measured workload.
-- **Cold-query numbers depend on whether your data fits in RAM.** At 28G there
-  is no measurable cold/hot gap. At 14G the same query measured 16.8× slower
-  cold, purely because OpenObserve's dataset no longer fit in page cache while
-  Prometheus's did. Check that before comparing anything.
-- **Mimir needs ~3 full passes to reach steady state**, up to 3× slower on the
-  first. The other three are at steady state immediately.
+- **Halving the memory to 14 GB barely moves query latency** — every cell lands
+  within 5% — but Prometheus is OOMKilled on the million-series unfiltered
+  histogram, which alone peaks at 18.7 GB RSS. Sizing decides what runs, not
+  how fast it runs.
+- **Disk settles at different times per system.** Mimir's compactor holds
+  superseded blocks for `deletion_delay: 12h`, so its volume reads high for
+  ~14 hours after the last write. Measuring early inflates it.
 
 ## Repository layout
 

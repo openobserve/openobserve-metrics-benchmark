@@ -7,16 +7,16 @@ against four systems ingesting byte-identical data onto local NVMe.
 fastest system in that row.
 
 The benchmark was run twice against the same frozen dataset, changing only the
-memory limit: **28G** (generous) and **14G** (modest). Both are plausible
+memory limit: **28 GB** (generous) and **14 GB** (modest). Both are plausible
 production sizings for ~1M active series, and the pair answers two different
-questions — *how fast* at 28G, and *what still runs at all* at 14G.
+questions — *how fast* at 28 GB, and *what still runs at all* at 14 GB.
 
 ## Conditions
 
 | | |
 | --- | --- |
 | Hardware | one EC2 `m7gd.2xlarge` per system: 8 vCPU / 32 GiB, **474 GB local NVMe**, single-node |
-| Container limit | 7 CPU / **28G** (round 1) and **14G** (round 2), requests == limits |
+| Container limit | 7 CPU, memory **28 GB** (round 1) then **14 GB** (round 2); requests == limits |
 | Prometheus | `quay.io/prometheus/prometheus:v3.6.0` |
 | Mimir | `grafana/mimir:latest` (pulled 2026-08) |
 | OpenObserve | `0.92.0-rc1-b31ff6c`, two deployments differing only in `ZO_FILE_FORMAT` |
@@ -69,7 +69,7 @@ average cardinality of 41,759 — 100.00% of full.
 - 240 requests per round. Both rounds completed with no pod restarts except the
   two OOMKills described below.
 
-## Round 1 · 28G
+## Round 1 · 28 GB of memory
 
 Every system answers every query.
 
@@ -159,7 +159,7 @@ two OpenObserve formats:
 A selective filter is exactly what Vortex's layout exploits and what a
 full-scan columnar format does not.
 
-## Round 2 · 14G
+## Round 2 · 14 GB of memory
 
 Same dataset, same queries, half the memory. **Only one thing breaks.**
 
@@ -171,7 +171,7 @@ Same dataset, same queries, half the memory. **Only one thing breaks.**
 | Filtered, regex | 6h | 4,976 | 4,418 | 7,481 | **2,399** |
 | Filtered, equality | 6h | 4,777 | 4,412 | 7,517 | **2,353** |
 
-Everything else lands within 5% of its 28G value. Halving the memory changes
+Everything else lands within 5% of its 28 GB value. Halving the memory changes
 almost nothing — **except that Prometheus can no longer answer the
 million-series histogram at all.**
 
@@ -211,10 +211,10 @@ exactly. **Raising the limit so the query can run and having the query consume
 for it.
 
 Mimir answers the same query in a quarter of the memory and takes 35% longer —
-chunked streaming against bulk loading. On a 14G box that is the difference
+chunked streaming against bulk loading. On a 14 GB box that is the difference
 between an answer and a restart.
 
-## 6-hour medians, all queries (28G)
+## 6-hour medians, all queries (28 GB)
 
 | Query | Prometheus | Mimir | O2 · Parquet | O2 · Vortex |
 | --- | --- | --- | --- | --- |
@@ -245,7 +245,7 @@ workloads the format choice is worth more than the engine choice.
 
 ## Ingestion: resource usage
 
-Sampled every 10 minutes across the 8h23m ingestion, at the 28G limit.
+Sampled every 10 minutes across the 8h23m ingestion, at the 28 GB limit.
 
 | System | CPU (cores, typical) | RSS (steady) | Disk |
 | --- | --- | --- | --- |

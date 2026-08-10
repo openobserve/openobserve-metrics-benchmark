@@ -404,11 +404,11 @@
   <h1>One Dataset, <span class="accent">Four Systems</span> — Benchmarking Prometheus, Mimir, and OpenObserve on Metrics Ingestion and Queries</h1>
 
   <div class="lede">
-    The problem with most metrics-system benchmarks is that everyone tests their own way: different data, different hardware, different queries. The results can't be compared.<br><br>
-    <strong>So we pushed the same ~1.2 billion samples through one OTel Collector into four systems simultaneously, stopped ingestion, and ran the exact same PromQL against each over an identical frozen window.</strong>
+    <strong>We pushed the same ~1.2 billion samples through one OTel Collector into four systems simultaneously, stopped ingestion, and ran the exact same PromQL against each over an identical frozen window.</strong><br><br>
+    Then we ran the whole thing twice, changing only the memory limit — 28 GB, then 14 GB — because those turn out to answer different questions.
   </div>
 
-  <p>The contenders are four deployments with fully aligned configurations: <strong>Prometheus, Grafana Mimir, OpenObserve (Parquet format), and OpenObserve (Vortex format)</strong>. Each system gets a dedicated EC2 m7gd.2xlarge with its data on the node's <strong>local NVMe</strong>, query caches disabled, the same pinned time range, and identical query limits and timeouts. Ingestion is stopped before measuring, so all four query a frozen, identical dataset. The whole benchmark was then run twice — at a <strong>28G</strong> and a <strong>14G</strong> container limit — because those answer different questions: how fast, and what still runs at all.</p>
+  <p>The contenders are four deployments with fully aligned configurations: <strong>Prometheus, Grafana Mimir, OpenObserve (Parquet format), and OpenObserve (Vortex format)</strong>. Each system gets a dedicated EC2 m7gd.2xlarge with its data on the node's <strong>local NVMe</strong>, query caches disabled, the same pinned time range, and identical query limits and timeouts. Ingestion is stopped before measuring, so all four query a frozen, identical dataset. The whole benchmark was then run twice, changing only the container memory limit — <strong>28 GB</strong>, then <strong>14 GB</strong> — because those answer different questions: how fast, and what still runs at all.</p>
 
   <!-- Hero chart: 3h filtered histogram -->
   <figure>
@@ -446,7 +446,7 @@
   <p>Pin down the variables first — the numbers only mean something afterward.</p>
 
   <ul>
-    <li><strong>Hardware:</strong> one dedicated EC2 <code>m7gd.2xlarge</code> per system, 7 CPU, 474 GB local NVMe; container limit 28G in round 1 and 14G in round 2</li>
+    <li><strong>Hardware:</strong> one dedicated EC2 <code>m7gd.2xlarge</code> per system, 7 CPU, 474 GB local NVMe; container memory limit 28 GB in round 1 and 14 GB in round 2</li>
     <li><strong>Versions:</strong> Prometheus <code>quay.io/prometheus/prometheus:v3.6.0</code>; Mimir <code>grafana/mimir:latest</code>; OpenObserve <code>0.92.0-rc3</code>, two OpenObserve deployments as an A/B: one with <code>ZO_FILE_FORMAT=parquet</code>, one with <code>ZO_FILE_FORMAT=vortex</code>. All single-node</li>
     <li><strong>Fairness settings:</strong> all query caches disabled; OpenObserve's Parquet filter pushdown disabled (<code>ZO_FEATURE_PUSHDOWN_FILTER_ENABLED=false</code> — it's on by default, but in our metrics tests it actually slowed queries by ~20%, so we turned it off; the switch only affects Parquet, Vortex's filter pushdown is always on)</li>
     <li><strong>Query range:</strong> 2026-08-06 00:00 – 03:00 (CST), every query executed 3 times, all three results shown in the tables</li>
@@ -899,13 +899,13 @@ selected by the query.</code></pre>
 
   <p>Put differently: <strong>the "filter by service/endpoint" queries that dominate real dashboards are exactly the shape where Vortex gains the most.</strong></p>
 
-  <h2>Round 2: the same benchmark at 14G</h2>
+  <h2>Round 2: the same benchmark at 14 GB of memory</h2>
 
   <p>Beyond the headline numbers, one phenomenon is worth recording.</p>
 
-  <p><strong>Halving the memory changes almost nothing — except that Prometheus stops being able to answer.</strong> The entire benchmark was re-run at a 14G limit against the same frozen dataset. Every cell landed within 5% of its 28G value, with two exceptions: the million-series unfiltered histogram at 3h and at 6h, where <strong>Prometheus was OOMKilled</strong> both times, mid-query, after 158s and 192s respectively (<code>restartCount=2</code>, <code>exitCode=137</code>).</p>
+  <p><strong>Halving the memory changes almost nothing — except that Prometheus stops being able to answer.</strong> The entire benchmark was re-run with the memory limit cut from 28 GB to 14 GB, against the same frozen dataset. Every cell landed within 5% of its 28 GB value, with two exceptions: the million-series unfiltered histogram at 3h and at 6h, where <strong>Prometheus was OOMKilled</strong> both times, mid-query, after 158s and 192s respectively (<code>restartCount=2</code>, <code>exitCode=137</code>).</p>
 
-  <p>The reason shows up in a direct measurement. A single 3-hour unfiltered histogram peaks at <strong>18.7GB RSS in Prometheus</strong> against <strong>4.25GB in Mimir</strong> — Prometheus loads samples into memory, and at <code>--query.max-samples=1e9</code> and ~16 bytes per sample that is ~16GB, matching the measured rise almost exactly. <strong>Raising the limit so the query can run, and having the query consume 20GB, are the same decision.</strong> Mimir answers it in a quarter of the memory and takes 35% longer; on a 14G box that is the difference between an answer and a restart.</p>
+  <p>The reason shows up in a direct measurement. A single 3-hour unfiltered histogram peaks at <strong>18.7GB RSS in Prometheus</strong> against <strong>4.25GB in Mimir</strong> — Prometheus loads samples into memory, and at <code>--query.max-samples=1e9</code> and ~16 bytes per sample that is ~16GB, matching the measured rise almost exactly. <strong>Raising the limit so the query can run, and having the query consume 20GB, are the same decision.</strong> Mimir answers it in a quarter of the memory and takes 35% longer; on a 14 GB box that is the difference between an answer and a restart.</p>
 
   <p>Worth noting how this was captured at all: <code>curl</code> cannot distinguish an OOMKill from a network failure — both surface as HTTP 000. The harness records a per-request timestamp and samples container restart state before and after each run, so <code>finishedAt=16:58:26Z</code> could be matched to the exact request that triggered it. Without that, this result would read "connection failure" and mean nothing.</p>
 
@@ -940,7 +940,7 @@ scan_size 137424238093, compressed_size 3627283262, took: 3 ms</code></pre>
     <ul>
       <li>Versions: Prometheus <code>v3.6.0</code>, Mimir <code>grafana/mimir:latest</code>, OpenObserve <code>0.92.0-rc3</code>; the two OpenObserve deployments differ only in <code>ZO_FILE_FORMAT</code> (parquet/vortex)</li>
       <li>Mimir's ingestion limits (ingestion_rate, max_global_series_per_user, etc.) were raised so writes were never throttled by defaults; query-side chunk limits were left at default</li>
-      <li>One dedicated EC2 m7gd.2xlarge per system: 7 CPU, 474 GB local NVMe, container limit 28G / 14G, all single-node deployments</li>
+      <li>One dedicated EC2 m7gd.2xlarge per system: 7 CPU, 474 GB local NVMe, container memory limit 28 GB then 14 GB, all single-node deployments</li>
       <li>All query caches disabled; OpenObserve's Parquet filter pushdown disabled (<code>ZO_FEATURE_PUSHDOWN_FILTER_ENABLED=false</code> — on by default, but ~20% slower in our metrics tests)</li>
       <li>Data generated by fake-webserver on 24 pods (~45k bucket series each, ~1.09M total), shipped through a standalone OTel Collector writing to all systems simultaneously; ~1.2B samples across the <code>codelab_api_*</code> metrics</li>
       <li>Query range 2026-08-06 00:00–03:00 (CST); every query run 3 times — tables keep all raw values, charts use medians</li>
