@@ -21,9 +21,9 @@ questions — *how fast* at 28 GB, and *what still runs at all* at 14 GB.
 | Mimir | `grafana/mimir:latest` (pulled 2026-08) |
 | OpenObserve | `v0.92.0`, two deployments differing only in `ZO_FILE_FORMAT` |
 | Load | `openobserve/fake-webserver:v2` × 24 pods, scraped every 15s |
-| Ingestion | 2026-08-09 12:47–21:10 CST (8h23m), then **stopped** |
-| Query range | ends 2026-08-09 20:00 CST, pinned absolutely |
-| Windows | 30m / 1h / 3h / 6h — 19:30, 19:00, 17:00, 14:00 → 20:00 |
+| Ingestion | 2026-08-09 04:47–13:10 UTC (8h23m), then **stopped** |
+| Query range | ends 2026-08-09 12:00 UTC, pinned absolutely |
+| Windows | 30m / 1h / 3h / 6h — 11:30, 11:00, 09:00, 06:00 → 12:00 |
 | Step | per window, Grafana's rule — see below |
 | Query limits | raised to match across all four — see [deploy/README.md](deploy/README.md#query-limits) |
 | Query timeout | 600s everywhere, matching OpenObserve's default |
@@ -315,7 +315,7 @@ and the wait is not the same for every system:
 | Mimir | 12h (`compactor.deletion_delay`) | **~14h** |
 
 Watched live across this run, Mimir's volume went **up** after the writes
-stopped — 21.6 GB at 21:10, 29.5 GB by 22:23 — because the compactor writes the
+stopped — 21.6 GB at 13:10, 29.5 GB by 14:23 — because the compactor writes the
 merged block first and keeps the sources for half a day. It came back down to
 **18 GB** only once `deletion_delay` expired:
 

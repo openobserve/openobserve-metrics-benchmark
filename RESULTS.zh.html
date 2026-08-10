@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>One Dataset, Four Systems — Benchmarking Prometheus, Mimir, and OpenObserve on Metrics Ingestion and Queries</title>
+<title>同一份数据，四套系统 —— Prometheus、Mimir 与 OpenObserve 的指标写入与查询基准测试</title>
 <style>
   :root {
     --bg: #fff;
@@ -30,7 +30,7 @@
   body {
     background: var(--bg);
     color: var(--ink);
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
     line-height: 1.7;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -74,8 +74,7 @@
   }
   h1 .accent {
     color: var(--accent);
-    font-style: italic;
-    font-weight: 700;
+    font-weight: 800;
   }
 
   /* Lede */
@@ -200,7 +199,6 @@
     font-weight: 500;
     position: relative;
     border-radius: 4px;
-    font-style: italic;
   }
   .pull::before {
     content: "";
@@ -216,6 +214,11 @@
     font-weight: 700;
     background: none;
     font-style: normal;
+  }
+
+  em {
+    font-style: normal;
+    font-weight: 700;
   }
 
   /* Figure / chart wrapper */
@@ -399,22 +402,22 @@
 <body>
 <article class="container">
 
-  <div class="eyebrow">OpenObserve · Metrics Benchmark</div>
+  <div class="eyebrow">OpenObserve · 指标基准测试</div>
 
-  <h1>One Dataset, <span class="accent">Four Systems</span> — Benchmarking Prometheus, Mimir, and OpenObserve on Metrics Ingestion and Queries</h1>
+  <h1>同一份数据，<span class="accent">四套系统</span> —— Prometheus、Mimir 与 OpenObserve 的指标写入与查询基准测试</h1>
 
   <div class="lede">
-    <strong>We pushed the same ~2.2 billion samples through one OTel Collector into four systems simultaneously, stopped ingestion, and ran the exact same PromQL against each over an identical frozen window.</strong><br><br>
-    Then we ran the whole thing twice, changing only the memory limit — 28 GB, then 14 GB — because those turn out to answer different questions.
+    <strong>我们用同一个 OTel Collector，把同样的约 22 亿个样本同时写入四套系统，随后停止写入，并在完全相同的冻结时间窗口上，对每套系统执行完全相同的 PromQL。</strong><br><br>
+    然后我们把整轮测试跑了两遍，只改一个变量——内存上限：先 28 GB，再 14 GB——因为这两个数字回答的其实是不同的问题。
   </div>
 
-  <p>The contenders are four deployments with fully aligned configurations: <strong>Prometheus, Grafana Mimir, OpenObserve (Parquet format), and OpenObserve (Vortex format)</strong>. Each gets a dedicated EC2 m7gd.2xlarge with its data on the node's <strong>local NVMe</strong>, query caches disabled, and identical query limits and timeouts — so that neither the disk nor a protective default decides the outcome.</p>
+  <p>参赛的是四套配置完全对齐的部署：<strong>Prometheus、Grafana Mimir、OpenObserve（Parquet 格式）和 OpenObserve（Vortex 格式）</strong>。每套系统独占一台 EC2 m7gd.2xlarge，数据落在该节点的<strong>本地 NVMe</strong> 上，查询缓存全部关闭，查询限制与超时完全一致——这样一来，结果既不会由磁盘决定，也不会由某个保护性默认值决定。</p>
 
   <!-- Hero chart: 6h unfiltered histogram, the million-series query -->
   <figure>
-    <svg width="100%" viewBox="0 0 680 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Six-hour unfiltered histogram_quantile query over 1.09 million series, latency across four systems">
-      <text x="40" y="34" font-family="sans-serif" font-size="15" font-weight="600" fill="#1a1a17">histogram_quantile over 1,085,760 series, 6-hour window (median)</text>
-      <text x="40" y="56" font-family="sans-serif" font-size="12" fill="#8a8a82">Same data · same PromQL · frozen dataset · local NVMe · 28 GB memory limit</text>
+    <svg width="100%" viewBox="0 0 680 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="109 万条时间线上的 6 小时无过滤 histogram_quantile 查询，四套系统的延迟对比">
+      <text x="40" y="34" font-family="sans-serif" font-size="15" font-weight="600" fill="#1a1a17">histogram_quantile 扫描 1,085,760 条时间线，6 小时窗口（中位数）</text>
+      <text x="40" y="56" font-family="sans-serif" font-size="12" fill="#8a8a82">相同数据 · 相同 PromQL · 冻结数据集 · 本地 NVMe · 28 GB 内存上限</text>
 
       <rect x="200" y="88" width="440" height="44" rx="3" fill="#c14920" opacity="0.92"/>
       <text x="192" y="116" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">Prometheus</text>
@@ -435,25 +438,25 @@
       <line x1="200" y1="330" x2="640" y2="330" stroke="#c8c1ad" stroke-width="1"/>
 
       <rect x="380" y="262" width="260" height="52" rx="6" fill="#0f6e56"/>
-      <text x="510" y="285" text-anchor="middle" font-family="sans-serif" font-size="18" font-weight="700" fill="#ffffff">6× faster — and it runs</text>
-      <text x="510" y="305" text-anchor="middle" font-family="sans-serif" font-size="10.5" fill="#d4ebe2">at stock limits all three refuse this query outright</text>
+      <text x="510" y="285" text-anchor="middle" font-family="sans-serif" font-size="18" font-weight="700" fill="#ffffff">快 6 倍 —— 而且跑得完</text>
+      <text x="510" y="305" text-anchor="middle" font-family="sans-serif" font-size="10.5" fill="#d4ebe2">默认限制下，三套系统都会直接拒绝这条查询</text>
     </svg>
-    <figcaption>Figure 1 · The million-series histogram over 6 hours, 28 GB memory limit. Bar lengths to real scale.</figcaption>
+    <figcaption>图 1 · 百万时间线的 histogram 查询，6 小时窗口，28 GB 内存上限。柱长按真实比例绘制。</figcaption>
   </figure>
 
-  <h2>The setup</h2>
+  <h2>测试设置</h2>
 
   <ul>
-    <li><strong>Hardware:</strong> one dedicated EC2 <code>m7gd.2xlarge</code> per system, 7 CPU, 474 GB local NVMe; container memory limit 28 GB in round 1 and 14 GB in round 2</li>
-    <li><strong>Versions:</strong> Prometheus <code>quay.io/prometheus/prometheus:v3.6.0</code>; Mimir <code>grafana/mimir:latest</code>; OpenObserve <code>v0.92.0</code>, two OpenObserve deployments as an A/B: one with <code>ZO_FILE_FORMAT=parquet</code>, one with <code>ZO_FILE_FORMAT=vortex</code>. All single-node</li>
-    <li><strong>Fairness settings:</strong> all query caches disabled; OpenObserve's Parquet filter pushdown disabled (<code>ZO_FEATURE_PUSHDOWN_FILTER_ENABLED=false</code> — it's on by default, but in our metrics tests it actually slowed queries by ~20%, so we turned it off; the switch only affects Parquet, Vortex's filter pushdown is always on)</li>
-    <li><strong>Ingestion:</strong> 2026-08-09 04:47–13:10 UTC (8h23m), then stopped — every query runs against a frozen dataset</li>
-    <li><strong>Query range:</strong> four windows of 30m / 1h / 3h / 6h, all ending 2026-08-09 12:00 UTC, pinned absolutely so successive runs measure the same data</li>
-    <li><strong>Step:</strong> computed per window the way Grafana does — <code>max(15s, range / 1000)</code> rounded up to a tidy interval — rather than pinned at 15s. That is 15s for 30m/1h/3h and 30s at 6h, so every window asks for ≤720 points instead of 1,440 at 6h</li>
-    <li><strong>Measurement:</strong> from a pod inside the cluster, in the same AZ as all four systems. Every query runs 3 times and the tables report the median, plus one cold first-touch request recorded separately and excluded from it</li>
+    <li><strong>硬件：</strong>每套系统独占一台 EC2 <code>m7gd.2xlarge</code>，7 核 CPU、474 GB 本地 NVMe；容器内存上限第一轮 28 GB，第二轮 14 GB</li>
+    <li><strong>版本：</strong>Prometheus <code>quay.io/prometheus/prometheus:v3.6.0</code>；Mimir <code>grafana/mimir:latest</code>；OpenObserve <code>v0.92.0</code>，两套 OpenObserve 部署做 A/B 对比：一套 <code>ZO_FILE_FORMAT=parquet</code>，一套 <code>ZO_FILE_FORMAT=vortex</code>。全部为单节点部署</li>
+    <li><strong>公平性设置：</strong>所有查询缓存关闭；OpenObserve 的 Parquet 过滤下推关闭（<code>ZO_FEATURE_PUSHDOWN_FILTER_ENABLED=false</code>——它默认开启，但在我们的指标测试中反而让查询慢了约 20%，所以关掉了；这个开关只影响 Parquet，Vortex 的过滤下推始终开启）</li>
+    <li><strong>写入：</strong>2026-08-09 04:47–13:10 UTC（8 小时 23 分），随后停止——所有查询都跑在冻结的数据集上</li>
+    <li><strong>查询区间：</strong>30m / 1h / 3h / 6h 四个窗口，统一以 2026-08-09 12:00 UTC 结束，用绝对时间钉死，因此反复运行测到的都是同一批数据</li>
+    <li><strong>步长（step）：</strong>按 Grafana 的做法逐窗口计算——<code>max(15s, range / 1000)</code> 再向上取整到整齐的间隔——而不是固定为 15s。也就是 30m/1h/3h 用 15s、6h 用 30s，于是每个窗口最多请求 720 个点，而不是 6h 时的 1,440 个</li>
+    <li><strong>测量方式：</strong>从集群内的一个 Pod 发起，与四套系统处在同一可用区。每条查询运行 3 次，表中给出中位数；另有一次冷启动的首访请求单独记录，不计入中位数</li>
   </ul>
 
-  <p>Key OpenObserve environment variables:</p>
+  <p>OpenObserve 的关键环境变量：</p>
 
 <pre><code>extraEnv:
   - name: ZO_METRICS_MAX_SERIES_RESPONSE
@@ -464,27 +467,27 @@
     value: "false"
   - name: ZO_RESULT_CACHE_ENABLED
     value: "false"
-  # A/B: one deployment on parquet, one on vortex
+  # A/B：一套用 parquet，一套用 vortex
   - name: ZO_FILE_FORMAT
     value: "vortex"</code></pre>
 
-  <p>Prometheus launch arguments — remote write receiver enabled so the OTel Collector can push, and the last two raised from their defaults so the million-series histogram runs instead of being refused:</p>
+  <p>Prometheus 的启动参数——开启 remote write receiver 让 OTel Collector 能够推送数据；最后两项在默认值基础上调高，好让百万时间线的 histogram 查询能跑起来，而不是被直接拒绝：</p>
 
 <pre><code>args:
   - --config.file=/etc/prometheus/prometheus.yml
   - --storage.tsdb.path=/prometheus
   - --web.enable-lifecycle
   - --web.enable-remote-write-receiver
-  - --query.max-samples=1000000000   # default 50e6
-  - --query.timeout=600s             # default 2m</code></pre>
+  - --query.max-samples=1000000000   # 默认 50e6
+  - --query.timeout=600s             # 默认 2m</code></pre>
 
-  <p>Key Mimir configuration. Ingestion limits are raised so the write path is never throttled by defaults; the query-side ones are raised for the same reason as Prometheus's. Mimir needs <em>both</em> timeouts — <code>http_server_write_timeout</code> also defaults to 2m and fires first, closing the connection before Mimir can write its own timeout response:</p>
+  <p>Mimir 的关键配置。写入侧限制被调高，避免写入路径被默认值限流；查询侧的调整理由与 Prometheus 相同。Mimir 需要<em>同时</em>设置两个超时——<code>http_server_write_timeout</code> 同样默认 2 分钟，而且会先触发，在 Mimir 来得及写出自己的超时响应之前就把连接关掉：</p>
 
 <pre><code>querier:
-  timeout: 600s                        # default 2m
+  timeout: 600s                        # 默认 2m
 
 server:
-  http_server_write_timeout: 600s      # default 2m
+  http_server_write_timeout: 600s      # 默认 2m
 
 store_gateway:
   sharding_ring:
@@ -494,46 +497,46 @@ limits:
   ingestion_rate: 20000000
   ingestion_burst_size: 20000000
   max_global_series_per_user: 150000000
-  max_fetched_chunks_per_query: 20000000   # default 2e6
+  max_fetched_chunks_per_query: 20000000   # 默认 2e6
   ha_cluster_label: prometheus
   ha_replica_label: prometheus_replica</code></pre>
 
-  <h3>How the measurement is taken</h3>
+  <h3>测量是怎么做的</h3>
 
-  <p>Four choices here move the numbers more than any configuration above, so they are worth stating outright.</p>
+  <p>下面这四个选择对数字的影响，比上面任何一项配置都大，值得明说。</p>
 
-  <p><strong>Queries are issued from inside the cluster.</strong> The obvious way to drive a benchmark from a laptop is <code>kubectl port-forward</code>, and it invalidates the result. The fastest query in this set answers in about 100ms; forwarding adds far more than that, and it does not add a constant — the same query measured 1,656ms to 2,862ms of pure overhead across repeats. That does not merely inflate the numbers, it destroys the ratios between systems, which is the only thing a comparison is for. Everything here is measured from a pod in the cluster, in the same availability zone as all four systems, on a node that is not under test.</p>
+  <p><strong>查询从集群内部发起。</strong>要在笔记本上跑基准测试，最顺手的办法是 <code>kubectl port-forward</code>，而它会让结果失效。这组测试里最快的查询约 100ms 就能返回；端口转发带来的开销远不止于此，而且它加上去的不是一个常量——同一条查询在多次重复中，纯开销从 1,656ms 到 2,862ms 不等。这不只是把数字整体抬高，它还摧毁了系统之间的比例关系，而比例正是做对比的唯一意义所在。这里所有数据都是从集群内的一个 Pod 测得的，与四套系统同处一个可用区，且所在节点不在被测之列。</p>
 
-  <p><strong>Every system's data is on node-local NVMe.</strong> Each system gets a dedicated <code>m7gd.2xlarge</code> and writes to that node's instance store, so storage is not a variable between them and no query is measuring EBS throughput.</p>
+  <p><strong>每套系统的数据都放在节点本地 NVMe 上。</strong>每套系统独占一台 <code>m7gd.2xlarge</code>，写入该节点的实例存储，因此存储不构成系统之间的变量，也没有任何一条查询是在测 EBS 的吞吐。</p>
 
-  <p><strong>Ingestion is stopped before anything is measured.</strong> All four query a frozen dataset over absolutely-pinned time windows, so a run repeated an hour later sees the same bytes. Load still arriving during measurement would make each system's numbers depend on what it happened to be compacting.</p>
+  <p><strong>所有测量都在停止写入之后进行。</strong>四套系统查询的都是冻结的数据集，时间窗口以绝对时间钉死，因此一小时后重跑看到的仍是同样的字节。如果测量期间还有流量写入，各系统的数字就会取决于它当时恰好在压缩什么。</p>
 
-  <p><strong>The step is computed, not pinned.</strong> A fixed 15s step makes the point count grow with the window — 1,440 points at 6h — which no dashboard would ever request. Grafana asks for roughly the panel width in pixels, so this benchmark uses its rule: <code>max(15s, range / 1000)</code> rounded up to a tidy interval. That is 15s at 30m/1h/3h and 30s at 6h. It matters because <strong>Prometheus and Mimir cost scales with the number of output points, while OpenObserve's scales with the data scanned</strong> — on a fixed 3-hour window, widening the step from 36 to 720 points moved Prometheus 1.68s→3.92s and Mimir 1.14s→4.11s, but OpenObserve only 3.45s→4.63s. Publish your step whichever way you go; it is the single biggest lever on absolute latency here.</p>
+  <p><strong>步长是算出来的，不是钉死的。</strong>固定 15s 的步长会让点数随窗口一起膨胀——6 小时就是 1,440 个点——而没有哪个仪表盘会这么请求。Grafana 请求的点数大致等于面板的像素宽度，所以本次基准测试沿用它的规则：<code>max(15s, range / 1000)</code> 向上取整到整齐的间隔。也就是 30m/1h/3h 用 15s、6h 用 30s。这一点之所以重要，是因为 <strong>Prometheus 和 Mimir 的开销随输出点数增长，而 OpenObserve 的开销随扫描的数据量增长</strong>——在固定的 3 小时窗口上，把点数从 36 个加密到 720 个，Prometheus 从 1.68s 变成 3.92s、Mimir 从 1.14s 变成 4.11s，而 OpenObserve 只从 3.45s 变成 4.63s。无论你怎么选，都请把步长一并公布；它是这里对绝对延迟影响最大的单一变量。</p>
 
-  <p>One more: the <strong>first request against each cell is recorded separately and excluded from the medians</strong>. A cold first touch pays for file opens, index loads and page-cache misses, and answers a different question — "what does the first query after a gap cost?" — than the warm runs that follow.</p>
+  <p>还有一点：<strong>每个格子的第一次请求都单独记录，并从中位数中剔除</strong>。冷启动的首次访问要付出打开文件、加载索引和 page cache 未命中的代价，它回答的是另一个问题——"隔了一段时间之后的第一条查询要花多少钱？"——而不是随后那些热运行所回答的问题。</p>
 
-  <h3>How the data was generated</h3>
+  <h3>数据是怎么生成的</h3>
 
-  <p>The workload comes from <a href="https://github.com/openobserve/fake-webserver"><code>openobserve/fake-webserver:v2</code></a>: 24 pods, each producing ~45k time series, so <strong>the histogram's <code>_bucket</code> metric carries roughly 1.09 million active series</strong>.</p>
+  <p>负载来自 <a href="https://github.com/openobserve/fake-webserver"><code>openobserve/fake-webserver:v2</code></a>：24 个 Pod，每个产生约 4.5 万条时间线，因此 <strong>histogram 的 <code>_bucket</code> 指标承载着约 109 万条活跃时间线</strong>。</p>
 
-  <p>On the collection side, a separately deployed OTel Collector <strong>writes the same data to all systems under test simultaneously</strong> — every system receives the exact same samples, <strong>~2.2 billion across the <code>codelab_api_*</code> metrics</strong>, spanning 1,085,760 bucket series.</p>
+  <p>采集侧由一个单独部署的 OTel Collector <strong>把同样的数据同时写入所有被测系统</strong>——每套系统收到的样本完全相同，<strong><code>codelab_api_*</code> 系列指标合计约 22 亿个样本</strong>，覆盖 1,085,760 条 bucket 时间线。</p>
 
-  <p>Cardinality of the two key metrics:</p>
+  <p>两个关键指标的基数：</p>
 
   <ul>
-    <li><code>codelab_api_request_duration_seconds_bucket</code>: <strong>1,085,760</strong> series (high cardinality; used by the histogram queries)</li>
-    <li><code>codelab_api_request_duration_seconds_count</code>: <strong>41,760</strong> series (used by the irate query)</li>
+    <li><code>codelab_api_request_duration_seconds_bucket</code>：<strong>1,085,760</strong> 条时间线（高基数；histogram 查询使用）</li>
+    <li><code>codelab_api_request_duration_seconds_count</code>：<strong>41,760</strong> 条时间线（irate 查询使用）</li>
   </ul>
 
-  <p>Remember that bucket cardinality. A million series is where the results start to diverge.</p>
+  <p>记住这个 bucket 基数。百万条时间线，正是结果开始分化的地方。</p>
 
-  <h2>Ingestion: resource usage</h2>
+  <h2>写入：资源占用</h2>
 
-  <p>Sampled every 10 minutes across the 8h23m ingestion, at the 28 GB memory limit. Disk is the settled figure, 14.8 hours after the last write:</p>
+  <p>在 28 GB 内存上限下，于 8 小时 23 分的写入期间每 10 分钟采样一次。磁盘是最后一次写入 14.8 小时之后的稳定值：</p>
 
   <table>
     <thead>
-      <tr><th>System</th><th>CPU (cores, typical)</th><th>RSS (steady)</th><th>Disk (settled)</th></tr>
+      <tr><th>系统</th><th>CPU（核数，典型值）</th><th>RSS（稳态）</th><th>磁盘（稳定后）</th></tr>
     </thead>
     <tbody>
       <tr><td>Prometheus</td><td>1.3–1.9</td><td>3.2–4.1 GB</td><td>11 GB</td></tr>
@@ -545,7 +548,7 @@ limits:
 
   <figure>
     <svg width="100%" viewBox="0 0 692 300" xmlns="http://www.w3.org/2000/svg" role="img">
-      <text x="0" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">CPU during ingestion (cores, typical — lower is better)</text>
+      <text x="0" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">写入期间的 CPU（核数，典型值 —— 越低越好）</text>
       <line x1="0" y1="27" x2="680" y2="27" stroke="#e0d9c8" stroke-width="1"/>
       <text x="100" y="45" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="108" y="36" width="454.7" height="11" rx="2" fill="#c14920" opacity="0.92"/>
@@ -559,7 +562,7 @@ limits:
       <text x="100" y="93" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
       <rect x="108" y="84" width="511.6" height="11" rx="2" fill="#0f6e56" opacity="0.92"/>
       <text x="628" y="93" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1.8</text>
-      <text x="0" y="119" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Memory during ingestion (GB RSS, peak of steady range — lower is better)</text>
+      <text x="0" y="119" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">写入期间的内存（GB RSS，稳定区间峰值 —— 越低越好）</text>
       <line x1="0" y1="127" x2="680" y2="127" stroke="#e0d9c8" stroke-width="1"/>
       <text x="100" y="145" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="108" y="136" width="402.5" height="11" rx="2" fill="#c14920" opacity="0.92"/>
@@ -573,7 +576,7 @@ limits:
       <text x="100" y="193" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
       <rect x="108" y="184" width="206.2" height="11" rx="2" fill="#0f6e56" opacity="0.92"/>
       <text x="322" y="193" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2.1</text>
-      <text x="0" y="219" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Disk, settled 14.8h after the last write (GB — lower is better)</text>
+      <text x="0" y="219" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">磁盘，最后一次写入 14.8 小时后的稳定值（GB —— 越低越好）</text>
       <line x1="0" y1="227" x2="680" y2="227" stroke="#e0d9c8" stroke-width="1"/>
       <text x="100" y="245" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="108" y="236" width="212.1" height="11" rx="2" fill="#c14920" opacity="0.92"/>
@@ -588,26 +591,26 @@ limits:
       <rect x="108" y="284" width="520.7" height="11" rx="2" fill="#0f6e56" opacity="0.92"/>
       <text x="637" y="293" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">27</text>
     </svg>
-    <figcaption>Figure 2 · Resource usage while ingesting ~1.09M bucket series, 28 GB memory limit.</figcaption>
+    <figcaption>图 2 · 写入约 109 万条 bucket 时间线期间的资源占用，28 GB 内存上限。</figcaption>
   </figure>
 
-  <p>Three observations:</p>
+  <p>三点观察：</p>
 
-  <p><strong>Memory is OpenObserve's clear win.</strong> Sampled every ten minutes across 8h23m of ingestion as <strong>RSS</strong> — the memory the process actually holds, the number <code>top</code> reports in <code>RES</code>, not page cache the kernel is free to reclaim — Prometheus ran 3.2–4.1GB and Mimir 4.5–5.5GB, both moving in a sawtooth as head blocks fill and compact. Both OpenObserve variants stay <strong>flat at 1.5–2.1GB</strong> — roughly half of Prometheus and a third of Mimir. Once ingestion stops everything collapses: Prometheus to 2.4GB, Mimir to 2.5GB, and both OpenObserve deployments to <strong>under 600MB</strong>; the ingestion-time figures are buffers and WAL, not resident working set.</p>
+  <p><strong>内存是 OpenObserve 明显的胜场。</strong>在 8 小时 23 分的写入期间每十分钟采样一次 <strong>RSS</strong>——进程真正持有的内存，也就是 <code>top</code> 里 <code>RES</code> 那一列，而不是内核可以随时回收的 page cache——Prometheus 在 3.2–4.1GB，Mimir 在 4.5–5.5GB，两者都随着 head block 填满与压缩而呈锯齿状起伏。两个 OpenObserve 变体都<strong>平稳保持在 1.5–2.1GB</strong>——大约是 Prometheus 的一半、Mimir 的三分之一。写入一停，所有数字都塌了下来：Prometheus 降到 2.4GB，Mimir 降到 2.5GB，两套 OpenObserve 部署都降到 <strong>600MB 以下</strong>；写入期间的那些数字是缓冲区和 WAL，不是常驻工作集。</p>
 
-  <p><strong>OpenObserve pays for it in CPU.</strong> ~1.6–2.2 cores versus Prometheus's ~1.3–1.9 and Mimir's ~0.7–1.1. The extra cycles go into columnar encoding and compression. At identical ingest throughput, that is the price paid for query performance and low memory.</p>
+  <p><strong>OpenObserve 为此付出的代价在 CPU 上。</strong>约 1.6–2.2 核，对比 Prometheus 的约 1.3–1.9 核和 Mimir 的约 0.7–1.1 核。多出来的算力花在列式编码和压缩上。在写入吞吐相同的前提下，这就是换取查询性能和低内存所付的价格。</p>
 
-  <p><strong>Disk usage is largest for OpenObserve, and it deserves context.</strong> 28GB versus Prometheus's 11GB and Mimir's 18GB, over 8h23m of ingestion. A general-purpose columnar format keeps full detail rather than applying TSDB-style XOR/delta compression tuned specifically for time series; in exchange, the same data simultaneously serves SQL, PromQL, and arbitrary dimensional analysis, and maps naturally onto object storage, where it typically lives in production at a very different unit cost. Parquet and Vortex tie, at 28 and 27GB. All four figures were taken <strong>14.8 hours after the last write</strong>, once every system's compaction and cleanup had finished.</p>
+  <p><strong>磁盘占用是 OpenObserve 最大，但这需要放在上下文里看。</strong>8 小时 23 分的写入下，28GB 对 Prometheus 的 11GB、Mimir 的 18GB。通用列式格式保留完整细节，而不是套用 TSDB 那种专为时间序列调优的 XOR/delta 压缩；作为交换，同一份数据可以同时服务 SQL、PromQL 和任意维度的分析，并且天然适配对象存储——生产环境中它通常就存放在对象存储上，单位成本完全不是一个量级。Parquet 与 Vortex 打平，分别是 28GB 和 27GB。四个数字都是在<strong>最后一次写入 14.8 小时之后</strong>读取的，此时各系统的压缩与清理都已完成。</p>
 
-  <p><strong>Disk is the one number you cannot measure right after stopping ingestion.</strong> Watched live across this run, Mimir's volume went <em>up</em> after the writes stopped — 21.6GB at 13:10, 29.5GB by 14:23 — because the compactor writes the merged block first and keeps the sources for half a day. It fell back to 18GB only once <code>deletion_delay</code> expired. Read at stop+2h, Mimir looks the same size as OpenObserve; settled, OpenObserve uses 1.6× more. Only Mimir moves — Prometheus and OpenObserve read the same at both times. Two stable readings 30 seconds apart prove nothing.</p>
+  <p><strong>磁盘是唯一一个不能在停止写入后立刻测的数字。</strong>这轮测试中实时观察，Mimir 的卷在写入停止后反而<em>涨了上去</em>——13:10 时 21.6GB，到 14:23 已是 29.5GB——因为 compactor 会先写出合并后的 block，并把源文件保留半天。只有等 <code>deletion_delay</code> 到期，它才回落到 18GB。在停止写入后 2 小时读数，Mimir 看起来和 OpenObserve 一样大；等稳定下来，才是 OpenObserve 用得多 1.6 倍。只有 Mimir 会变——Prometheus 和 OpenObserve 在两个时间点读到的数字一样。相隔 30 秒的两次稳定读数，什么都证明不了。</p>
 
-  <p>The wait is not symmetric. OpenObserve deletes merged-away files after 2h (<code>ZO_COMPACT_DELETE_FILES_DELAY_HOURS</code>) and settles at ~2h; Prometheus deletes source blocks immediately after compaction and settles at ~2–3h; <strong>Mimir needs ~14h</strong>, and neither of its timers can usefully be shortened. Its PVC holds two copies: the filesystem bucket, whose superseded source blocks the compactor keeps for <code>deletion_delay: 12h</code>, and the ingester's local TSDB, kept for <code>blocks_storage.tsdb.retention_period: 13h</code> after upload. Lowering the first only moves an intermediate drop earlier — the volume still waits on the 13-hour timer — and the second must not be lowered at all: it is aligned with <code>query_store_after: 12h</code>, and dropping the ingester's copy early makes queries silently return incomplete results. Wait ~14 hours, or say your disk figures are provisional.</p>
+  <p>各系统需要等待的时间并不对称。OpenObserve 在 2 小时后删除被合并掉的文件（<code>ZO_COMPACT_DELETE_FILES_DELAY_HOURS</code>），约 2 小时即稳定；Prometheus 在压缩完成后立即删除源 block，约 2–3 小时稳定；<strong>Mimir 需要约 14 小时</strong>，而它的两个计时器都没法有效缩短。它的 PVC 里存着两份数据：一份是文件系统 bucket，其中被取代的源 block 会被 compactor 保留 <code>deletion_delay: 12h</code>；另一份是 ingester 的本地 TSDB，上传之后仍会保留 <code>blocks_storage.tsdb.retention_period: 13h</code>。调小前者只会让中间的那次下降提前——卷的大小仍要等那个 13 小时的计时器；而后者根本不该调小：它与 <code>query_store_after: 12h</code> 对齐，过早丢弃 ingester 的副本会让查询悄无声息地返回不完整的结果。要么等约 14 小时，要么就说明你的磁盘数字只是暂定值。</p>
 
-  <p><strong>Measuring early biases the comparison towards OpenObserve</strong>, by inflating the systems it is compared against. Wait ~14 hours after the last write, or label your disk figures provisional.</p>
+  <p><strong>过早测量会让对比偏向 OpenObserve</strong>，因为它抬高了被对比的那几套系统。请在最后一次写入后等约 14 小时，否则就把磁盘数字标注为暂定值。</p>
 
-  <h2>Queries: four PromQL expressions, four time windows</h2>
+  <h2>查询：四条 PromQL 表达式，四个时间窗口</h2>
 
-  <p>The query tests cover the four most common dashboard workloads — irate, unfiltered histogram, regex-filtered histogram, equality-filtered histogram — each run over 30-minute, 1-hour, 3-hour and 6-hour windows. <strong>Tables show the median of three runs, in ms.</strong></p>
+  <p>查询测试覆盖仪表盘上最常见的四类负载——irate、无过滤 histogram、正则过滤 histogram、等值过滤 histogram——每一类都在 30 分钟、1 小时、3 小时和 6 小时窗口上运行。<strong>表中为三次运行的中位数，单位 ms。</strong></p>
 
   <h3>1 · irate</h3>
 
@@ -615,7 +618,7 @@ limits:
 
   <table>
     <thead>
-      <tr><th>Window</th><th>Step</th><th>Prometheus</th><th>Mimir</th><th>O2 · Parquet</th><th>O2 · Vortex</th></tr>
+      <tr><th>窗口</th><th>步长</th><th>Prometheus</th><th>Mimir</th><th>O2 · Parquet</th><th>O2 · Vortex</th></tr>
     </thead>
     <tbody>
       <tr><td>30m</td><td>15s</td><td>1,332</td><td>1,216</td><td><strong>105</strong></td><td>132</td></tr>
@@ -625,9 +628,9 @@ limits:
     </tbody>
   </table>
 
-  <p>The two OpenObserve variants run neck and neck — and lead throughout. On the 3-hour window, Parquet's median of 664ms is <strong>about 11× faster than Prometheus (7,517ms) and about 13× faster than Mimir (8,630ms)</strong>. Both stay under a second on every window, including 6h, where Parquet is 9.6× faster than Prometheus and Vortex 10.8×. Over 41,760 series this is the cheapest query in the set, and it is still an order of magnitude apart.</p>
+  <p>两个 OpenObserve 变体不分伯仲——而且全程领先。在 3 小时窗口上，Parquet 的中位数 664ms <strong>比 Prometheus（7,517ms）快约 11 倍，比 Mimir（8,630ms）快约 13 倍</strong>。两者在每个窗口上都保持在 1 秒以内，6 小时窗口也不例外——那里 Parquet 比 Prometheus 快 9.6 倍，Vortex 快 10.8 倍。在 41,760 条时间线上，这是这组测试里最便宜的一条查询，而差距依然是一个数量级。</p>
 
-  <h3>2 · Unfiltered histogram: the million-series stress test</h3>
+  <h3>2 · 无过滤 histogram：百万时间线压力测试</h3>
 
 <pre><code>histogram_quantile(
   0.9,
@@ -636,11 +639,11 @@ limits:
   )
 )</code></pre>
 
-  <p>This query has no label filter at all — it must run rate + aggregation over all <strong>1,085,760 series</strong>. It's the most brutal query in the test.</p>
+  <p>这条查询完全没有标签过滤——它必须在全部 <strong>1,085,760 条时间线</strong>上做 rate + 聚合。这是整个测试里最狠的一条。</p>
 
   <table>
     <thead>
-      <tr><th>Window</th><th>Step</th><th>Prometheus</th><th>Mimir</th><th>O2 · Parquet</th><th>O2 · Vortex</th></tr>
+      <tr><th>窗口</th><th>步长</th><th>Prometheus</th><th>Mimir</th><th>O2 · Parquet</th><th>O2 · Vortex</th></tr>
     </thead>
     <tbody>
       <tr><td>30m</td><td>15s</td><td>35,517</td><td>34,904</td><td>4,796</td><td><strong>4,301</strong></td></tr>
@@ -650,24 +653,24 @@ limits:
     </tbody>
   </table>
 
-  <p><strong>All four complete every window — but only because the limits were raised, on all three systems.</strong> At stock settings this query does not run at all. Prometheus refuses it outright:</p>
+  <p><strong>四套系统在每个窗口上都跑完了——但前提是三套系统的限制都被调高了。</strong>在默认设置下，这条查询根本跑不起来。Prometheus 直接拒绝：</p>
 
 <pre><code>execution: query processing would load too many samples
 into memory in query execution</code></pre>
 
-  <p>Mimir survives 30m and 1h, then refuses the wider windows:</p>
+  <p>Mimir 能撑过 30m 和 1h，更宽的窗口就拒绝了：</p>
 
 <pre><code>execution: the query exceeded the maximum number of chunks
 (limit: 2000000 chunks) (err-mimir-max-chunks-per-query).
 Consider reducing the time range and/or number of series
 selected by the query.</code></pre>
 
-  <p>OpenObserve's stock metrics limits reject it too.</p>
+  <p>OpenObserve 的默认指标限制同样会拒绝它。</p>
 
   <figure>
     <svg width="100%" viewBox="0 0 692 142" xmlns="http://www.w3.org/2000/svg" role="img">
       <defs><pattern id="errstripe2" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)"><rect width="8" height="8" fill="#f5dccd"/><rect width="4" height="8" fill="#c14920" opacity="0.6"/></pattern></defs>
-      <text x="0" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Unfiltered histogram · 3h (median)</text>
+      <text x="0" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">无过滤 histogram · 3h（中位数）</text>
       <line x1="0" y1="27" x2="328" y2="27" stroke="#e0d9c8" stroke-width="1"/>
       <text x="100" y="48" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="108" y="36" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
@@ -685,7 +688,7 @@ selected by the query.</code></pre>
       <rect x="108" y="108" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="108" y="108" width="19.1" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
       <text x="284" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">27.5s</text>
-      <text x="352" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Unfiltered histogram · 6h (median)</text>
+      <text x="352" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">无过滤 histogram · 6h（中位数）</text>
       <line x1="352" y1="27" x2="680" y2="27" stroke="#e0d9c8" stroke-width="1"/>
       <text x="452" y="48" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="460" y="36" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
@@ -704,16 +707,16 @@ selected by the query.</code></pre>
       <rect x="460" y="108" width="28.1" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
       <text x="636" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">44.4s</text>
     </svg>
-    <figcaption>Figure 3 · Million-series unfiltered histogram, 28 GB memory limit. At 14 GB Prometheus is OOMKilled on both windows.</figcaption>
+    <figcaption>图 3 · 百万时间线的无过滤 histogram，28 GB 内存上限。在 14 GB 下，Prometheus 在这两个窗口上都被 OOMKilled。</figcaption>
   </figure>
 
   <div class="pull">
-    Against a million-series unfiltered histogram, the defaults decide the outcome before the engines do: Prometheus and Mimir both <strong>refuse</strong> the query at stock limits. Given the same allowances and the same 600s clock, all four finish every window — and the spread is an order of magnitude.
+    面对百万时间线的无过滤 histogram，胜负在引擎出手之前就已由默认值决定：在默认限制下，Prometheus 和 Mimir 都会<strong>拒绝</strong>这条查询。给到同样的放宽额度、同样的 600 秒时限，四套系统在每个窗口上都能跑完——而差距是一个数量级。
   </div>
 
-  <p>Every one of these is a protective default doing its job, and this benchmark raises all of them — <code>--query.max-samples=1e9</code>, <code>max_fetched_chunks_per_query=20e6</code>, <code>ZO_METRICS_MAX_SERIES_RESPONSE=40000</code>, <code>ZO_METRICS_MAX_POINTS_PER_SERIES=1e7</code> — together with a uniform 600s timeout. At 6h OpenObserve then finishes in 47 seconds against Prometheus's 4.5 minutes and Mimir's 4.3 minutes.</p>
+  <p>这里每一条都是保护性默认值在尽职工作，而本次基准测试把它们全部调高了——<code>--query.max-samples=1e9</code>、<code>max_fetched_chunks_per_query=20e6</code>、<code>ZO_METRICS_MAX_SERIES_RESPONSE=40000</code>、<code>ZO_METRICS_MAX_POINTS_PER_SERIES=1e7</code>——并统一设置 600s 超时。于是在 6 小时窗口上，OpenObserve 用 47 秒跑完，而 Prometheus 用了 4.5 分钟、Mimir 用了 4.3 分钟。</p>
 
-  <h3>3 · Filtered histogram (regex match)</h3>
+  <h3>3 · 过滤 histogram（正则匹配）</h3>
 
 <pre><code>histogram_quantile(
   0.9,
@@ -724,7 +727,7 @@ selected by the query.</code></pre>
 
   <table>
     <thead>
-      <tr><th>Window</th><th>Step</th><th>Prometheus</th><th>Mimir</th><th>O2 · Parquet</th><th>O2 · Vortex</th></tr>
+      <tr><th>窗口</th><th>步长</th><th>Prometheus</th><th>Mimir</th><th>O2 · Parquet</th><th>O2 · Vortex</th></tr>
     </thead>
     <tbody>
       <tr><td>30m</td><td>15s</td><td>610</td><td>606</td><td>744</td><td><strong>255</strong></td></tr>
@@ -734,7 +737,7 @@ selected by the query.</code></pre>
     </tbody>
   </table>
 
-  <h3>4 · Filtered histogram (equality match)</h3>
+  <h3>4 · 过滤 histogram（等值匹配）</h3>
 
 <pre><code>histogram_quantile(
   0.9,
@@ -745,7 +748,7 @@ selected by the query.</code></pre>
 
   <table>
     <thead>
-      <tr><th>Window</th><th>Step</th><th>Prometheus</th><th>Mimir</th><th>O2 · Parquet</th><th>O2 · Vortex</th></tr>
+      <tr><th>窗口</th><th>步长</th><th>Prometheus</th><th>Mimir</th><th>O2 · Parquet</th><th>O2 · Vortex</th></tr>
     </thead>
     <tbody>
       <tr><td>30m</td><td>15s</td><td>603</td><td>608</td><td>663</td><td><strong>248</strong></td></tr>
@@ -755,12 +758,12 @@ selected by the query.</code></pre>
     </tbody>
   </table>
 
-  <p>The two filter styles behave almost identically: <strong>regex and equality matching cost essentially the same</strong>, across all four systems — the filter type isn't the variable, scan volume is. Ranking the 6-hour medians: <strong>Vortex 2,549ms &lt; Mimir 4,416ms &lt; Prometheus 4,798ms &lt; Parquet 8,199ms</strong>. Note the order: with a selective filter, Parquet falls behind <em>both</em> TSDBs while Vortex stays roughly twice as fast as either.</p>
+  <p>两种过滤方式的表现几乎完全一致：在全部四套系统上，<strong>正则匹配和等值匹配的开销基本相同</strong>——变量不是过滤类型，而是扫描量。按 6 小时的中位数排序：<strong>Vortex 2,549ms &lt; Mimir 4,416ms &lt; Prometheus 4,798ms &lt; Parquet 8,199ms</strong>。注意这个顺序：在有选择性的过滤条件下，Parquet 落到了<em>两个</em> TSDB 之后，而 Vortex 仍比它们中的任何一个快约一倍。</p>
 
   <figure>
     <svg width="100%" viewBox="0 0 692 274" xmlns="http://www.w3.org/2000/svg" role="img">
       <defs><pattern id="errstripe3" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)"><rect width="8" height="8" fill="#f5dccd"/><rect width="4" height="8" fill="#c14920" opacity="0.6"/></pattern></defs>
-      <text x="0" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">irate · 6h (median)</text>
+      <text x="0" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">irate · 6h（中位数）</text>
       <line x1="0" y1="27" x2="328" y2="27" stroke="#e0d9c8" stroke-width="1"/>
       <text x="100" y="48" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="108" y="36" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
@@ -778,7 +781,7 @@ selected by the query.</code></pre>
       <rect x="108" y="108" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="108" y="108" width="15.7" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
       <text x="284" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1.0s</text>
-      <text x="352" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Filtered histogram, regex · 6h</text>
+      <text x="352" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">过滤 histogram（正则）· 6h</text>
       <line x1="352" y1="27" x2="680" y2="27" stroke="#e0d9c8" stroke-width="1"/>
       <text x="452" y="48" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="460" y="36" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
@@ -796,7 +799,7 @@ selected by the query.</code></pre>
       <rect x="460" y="108" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="460" y="108" width="52.9" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
       <text x="636" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2549</text>
-      <text x="0" y="151" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Filtered histogram, equality · 6h</text>
+      <text x="0" y="151" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">过滤 histogram（等值）· 6h</text>
       <line x1="0" y1="159" x2="328" y2="159" stroke="#e0d9c8" stroke-width="1"/>
       <text x="100" y="180" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="108" y="168" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
@@ -814,7 +817,7 @@ selected by the query.</code></pre>
       <rect x="108" y="240" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="108" y="240" width="51.2" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
       <text x="284" y="252" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2404</text>
-      <text x="352" y="151" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Unfiltered histogram · 6h</text>
+      <text x="352" y="151" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">无过滤 histogram · 6h</text>
       <line x1="352" y1="159" x2="680" y2="159" stroke="#e0d9c8" stroke-width="1"/>
       <text x="452" y="180" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="460" y="168" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
@@ -833,21 +836,21 @@ selected by the query.</code></pre>
       <rect x="460" y="240" width="28.1" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
       <text x="636" y="252" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">44.4s</text>
     </svg>
-    <figcaption>Figure 4 · All four query types over the 6-hour window, 28 GB memory limit (unit: ms).</figcaption>
+    <figcaption>图 4 · 四类查询在 6 小时窗口上的表现，28 GB 内存上限（单位：ms）。</figcaption>
   </figure>
 
-  <h2>Parquet vs Vortex: same engine, two file formats</h2>
+  <h2>Parquet 对比 Vortex：同一个引擎，两种文件格式</h2>
 
-  <p>The only difference between the two OpenObserve deployments is <code>ZO_FILE_FORMAT</code>. The results split cleanly by query type:</p>
+  <p>两套 OpenObserve 部署之间唯一的差别，就是 <code>ZO_FILE_FORMAT</code>。结果按查询类型清清楚楚地分成两类：</p>
 
-  <p><strong>irate and unfiltered histogram: a tie.</strong> When queries must scan all the data, the two formats trade places within 5–10% — no decisive winner. Disk usage ties as well (28 and 27GB).</p>
+  <p><strong>irate 和无过滤 histogram：打平。</strong>当查询必须扫描全部数据时，两种格式在 5–10% 的范围内互有胜负——没有决定性的赢家。磁盘占用同样打平（28GB 与 27GB）。</p>
 
-  <p><strong>Filtered histogram: Vortex is consistently ~3× faster.</strong></p>
+  <p><strong>过滤 histogram：Vortex 稳定快约 3 倍。</strong></p>
 
   <figure>
     <svg width="100%" viewBox="0 0 692 238" xmlns="http://www.w3.org/2000/svg" role="img">
       <defs><pattern id="errstripe4" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)"><rect width="8" height="8" fill="#f5dccd"/><rect width="4" height="8" fill="#c14920" opacity="0.6"/></pattern></defs>
-      <text x="0" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Regex filter (median, ms)</text>
+      <text x="0" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">正则过滤（中位数，ms）</text>
       <line x1="0" y1="27" x2="328" y2="27" stroke="#e0d9c8" stroke-width="1"/>
       <text x="100" y="48" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">30m · Parquet</text>
       <rect x="108" y="36" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
@@ -881,7 +884,7 @@ selected by the query.</code></pre>
       <rect x="108" y="204" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="108" y="204" width="52.9" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
       <text x="284" y="216" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2549</text>
-      <text x="352" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Equality filter (median, ms)</text>
+      <text x="352" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">等值过滤（中位数，ms）</text>
       <line x1="352" y1="27" x2="680" y2="27" stroke="#e0d9c8" stroke-width="1"/>
       <text x="452" y="48" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">30m · Parquet</text>
       <rect x="460" y="36" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
@@ -916,36 +919,36 @@ selected by the query.</code></pre>
       <rect x="460" y="204" width="51.2" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
       <text x="636" y="216" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2404</text>
     </svg>
-    <figcaption>Figure 5 · Filtered histogram, Parquet vs Vortex across all four windows, 28 GB memory limit.</figcaption>
+    <figcaption>图 5 · 过滤 histogram，Parquet 与 Vortex 在四个窗口上的对比，28 GB 内存上限。</figcaption>
   </figure>
 
-  <p>The pattern is remarkably stable and widens with the window: 2.9× at 30m, 2.9× at 1h, 3.2× at 3h and 3.2× at 6h. At the 6-hour window Parquet is slower than both Prometheus and Mimir on this query while Vortex is roughly twice as fast as either — <strong>for dashboard-style filtered workloads the format choice is worth more than the engine choice</strong>.</p>
+  <p>这个规律非常稳定，并且随窗口变宽而拉大：30m 快 2.9 倍，1h 快 2.9 倍，3h 快 3.2 倍，6h 快 3.2 倍。在 6 小时窗口上，Parquet 在这条查询上比 Prometheus 和 Mimir 都慢，而 Vortex 比它们中的任何一个都快约一倍——<strong>对于仪表盘那类带过滤的负载，选格式比选引擎更值钱</strong>。</p>
 
-  <p>Put differently: <strong>the "filter by service/endpoint" queries that dominate real dashboards are exactly the shape where Vortex gains the most.</strong></p>
+  <p>换个说法：<strong>真实仪表盘上占绝大多数的"按服务/接口过滤"查询，恰恰是 Vortex 收益最大的那种形态。</strong></p>
 
-  <h2>Round 2: the same benchmark at 14 GB of memory</h2>
+  <h2>第二轮：同一套基准测试，内存降到 14 GB</h2>
 
-  <p>28 GB is a comfortable sizing for a million active series. 14 GB is a plausible one. Running the identical benchmark at both — same frozen dataset, same queries, same absolute time windows, only the container limit changed — turns "how fast is it" into a second question: <strong>what still runs at all?</strong></p>
+  <p>对一百万条活跃时间线来说，28 GB 是宽裕的配置，14 GB 则是一个说得过去的配置。在两个内存上限下跑完全相同的基准测试——同样的冻结数据集、同样的查询、同样的绝对时间窗口，只改容器的内存上限——就把"它有多快"变成了第二个问题：<strong>还有哪些查询根本跑得起来？</strong></p>
 
-  <p><strong>Halving the memory changes almost nothing — except that Prometheus stops being able to answer.</strong> Every cell landed within 5% of its 28 GB value, with two exceptions: the million-series unfiltered histogram at 3h and at 6h, where <strong>Prometheus was OOMKilled</strong> both times, mid-query, after 158s and 192s respectively (<code>restartCount=2</code>, <code>exitCode=137</code>).</p>
+  <p><strong>内存减半几乎什么都没改变——除了 Prometheus 再也答不上来。</strong>每个格子的数字都落在其 28 GB 版本的 5% 以内，只有两个例外：百万时间线无过滤 histogram 的 3h 和 6h 窗口，<strong>Prometheus 两次都被 OOMKilled</strong>，都发生在查询进行到一半时，分别在 158 秒和 192 秒之后（<code>restartCount=2</code>、<code>exitCode=137</code>）。</p>
 
   <table>
     <thead>
-      <tr><th>Query</th><th>Window</th><th>Prometheus</th><th>Mimir</th><th>O2 · Parquet</th><th>O2 · Vortex</th></tr>
+      <tr><th>查询</th><th>窗口</th><th>Prometheus</th><th>Mimir</th><th>O2 · Parquet</th><th>O2 · Vortex</th></tr>
     </thead>
     <tbody>
       <tr><td>irate</td><td>6h</td><td>10,870</td><td>8,820</td><td>1,153</td><td><strong>964</strong></td></tr>
-      <tr><td>Unfiltered histogram</td><td>3h</td><td class="err">OOMKilled</td><td>245,206</td><td>27,981</td><td><strong>26,306</strong></td></tr>
-      <tr><td>Unfiltered histogram</td><td>6h</td><td class="err">OOMKilled</td><td>255,710</td><td>45,594</td><td><strong>43,570</strong></td></tr>
-      <tr><td>Filtered, regex</td><td>6h</td><td>4,764</td><td>4,418</td><td>7,647</td><td><strong>2,405</strong></td></tr>
-      <tr><td>Filtered, equality</td><td>6h</td><td>4,764</td><td>4,427</td><td>7,650</td><td><strong>2,480</strong></td></tr>
+      <tr><td>无过滤 histogram</td><td>3h</td><td class="err">OOMKilled</td><td>245,206</td><td>27,981</td><td><strong>26,306</strong></td></tr>
+      <tr><td>无过滤 histogram</td><td>6h</td><td class="err">OOMKilled</td><td>255,710</td><td>45,594</td><td><strong>43,570</strong></td></tr>
+      <tr><td>过滤，正则</td><td>6h</td><td>4,764</td><td>4,418</td><td>7,647</td><td><strong>2,405</strong></td></tr>
+      <tr><td>过滤，等值</td><td>6h</td><td>4,764</td><td>4,427</td><td>7,650</td><td><strong>2,480</strong></td></tr>
     </tbody>
   </table>
 
   <figure>
-      <svg width="100%" viewBox="0 0 692 372" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Unfiltered histogram at 28 GB versus 14 GB memory limit">
+      <svg width="100%" viewBox="0 0 692 372" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="无过滤 histogram 在 28 GB 与 14 GB 内存上限下的对比">
       <defs><pattern id="oom" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)"><rect width="8" height="8" fill="#f5dccd"/><rect width="4" height="8" fill="#c14920" opacity="0.7"/></pattern></defs>
-      <text x="0" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Unfiltered histogram / 3h</text>
+      <text x="0" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">无过滤 histogram / 3h</text>
       <line x1="0" y1="27" x2="680" y2="27" stroke="#e0d9c8" stroke-width="1"/>
       <text x="110" y="46" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">Prometheus · 28 GB</text>
       <rect x="118" y="37" width="400" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
@@ -979,7 +982,7 @@ selected by the query.</code></pre>
       <rect x="118" y="161" width="400" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="118" y="161" width="39.2" height="12" rx="2" fill="#0f6e56" opacity="0.92"/>
       <text x="526" y="170.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">26.3s</text>
-      <text x="0" y="198" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Unfiltered histogram / 6h</text>
+      <text x="0" y="198" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">无过滤 histogram / 6h</text>
       <line x1="0" y1="206" x2="680" y2="206" stroke="#e0d9c8" stroke-width="1"/>
       <text x="110" y="225" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">Prometheus · 28 GB</text>
       <rect x="118" y="216" width="400" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
@@ -1014,41 +1017,41 @@ selected by the query.</code></pre>
       <rect x="118" y="340" width="64.9" height="12" rx="2" fill="#0f6e56" opacity="0.92"/>
       <text x="526" y="349.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">43.6s</text>
       </svg>
-    <figcaption>Figure 6 · The million-series histogram at both memory limits. Only Prometheus changes behaviour.</figcaption>
+    <figcaption>图 6 · 百万时间线的 histogram 在两个内存上限下的表现。只有 Prometheus 的行为发生了变化。</figcaption>
   </figure>
 
-  <p>The reason shows up in a direct measurement. A single 3-hour unfiltered histogram peaks at <strong>18.7GB RSS in Prometheus</strong> against <strong>4.25GB in Mimir</strong> — Prometheus loads samples into memory, and at <code>--query.max-samples=1e9</code> and ~16 bytes per sample that is ~16GB, matching the measured rise almost exactly. <strong>Raising the limit so the query can run, and having the query consume 20GB, are the same decision.</strong> Mimir answers it in a quarter of the memory and takes 35% longer; on a 14 GB box that is the difference between an answer and a restart.</p>
+  <p>原因可以直接测出来。单条 3 小时的无过滤 histogram，在 <strong>Prometheus 上的 RSS 峰值是 18.7GB</strong>，而在 <strong>Mimir 上只有 4.25GB</strong>——Prometheus 会把样本加载进内存，在 <code>--query.max-samples=1e9</code>、每个样本约 16 字节的前提下，这就是约 16GB，几乎与实测的涨幅完全吻合。<strong>调高限制好让查询能跑，和让这条查询吃掉 20GB 内存，本来就是同一个决定。</strong>Mimir 用四分之一的内存回答了同样的问题，代价是慢 35%；而在一台 14 GB 的机器上，这就是"拿到答案"和"进程重启"之间的差别。</p>
 
-  <p>Worth noting how this was captured at all: <code>curl</code> cannot distinguish an OOMKill from a network failure — both surface as HTTP 000. The harness records a per-request timestamp and samples container restart state before and after each run, so <code>finishedAt=16:58:26Z</code> could be matched to the exact request that triggered it. Without that, this result would read "connection failure" and mean nothing.</p>
+  <p>值得一提的是这个结果究竟是怎么被抓到的：<code>curl</code> 无法区分 OOMKill 和网络故障——两者都表现为 HTTP 000。测试脚本会记录每个请求的时间戳，并在每次运行前后采样容器的重启状态，因此 <code>finishedAt=16:58:26Z</code> 能够对应到触发它的那条确切请求。没有这一步，这个结果就只会显示为"连接失败"，毫无意义。</p>
 
   <hr class="divider">
 
-  <h2>The bottom line</h2>
+  <h2>结论</h2>
 
-  <p>Put the same ~2.2 billion samples and ~1.09 million bucket series in front of four systems, and the results condense to four sentences:</p>
+  <p>把同样的约 22 亿个样本、约 109 万条 bucket 时间线摆到四套系统面前，结果可以浓缩成四句话：</p>
 
   <ul>
-    <li><strong>Ingestion memory:</strong> OpenObserve stays flat at 1.5–2.1GB — about half of Prometheus and a third of Mimir, and under 600MB once ingestion stops. The trade-off is ~2.5× the disk of Prometheus (typically on object storage)</li>
-    <li><strong>Everyday queries:</strong> on irate at 6h, OpenObserve is ~10.8× faster than Prometheus and ~8.7× faster than Mimir; on filtered histograms Vortex leads Prometheus by 1.9×, while Parquet trails it by 1.7×</li>
-    <li><strong>The high-cardinality limit:</strong> on the million-series unfiltered histogram, stock limits make Prometheus and Mimir refuse the query outright. Raised to match, all four complete — OpenObserve in 27s at 3h against 3.2 and 4.1 minutes</li>
-    <li><strong>The format race:</strong> Vortex is 2.9×–3.2× faster than Parquet on filtered queries and ties on full scans — for dashboard-style filtered workloads, Vortex is the better default</li>
+    <li><strong>写入内存：</strong>OpenObserve 平稳保持在 1.5–2.1GB——约为 Prometheus 的一半、Mimir 的三分之一，写入停止后更降到 600MB 以下。代价是磁盘占用约为 Prometheus 的 2.5 倍（生产中通常放在对象存储上）</li>
+    <li><strong>日常查询：</strong>6 小时窗口的 irate 上，OpenObserve 比 Prometheus 快约 10.8 倍、比 Mimir 快约 8.7 倍；在过滤 histogram 上，Vortex 领先 Prometheus 1.9 倍，而 Parquet 落后它 1.7 倍</li>
+    <li><strong>高基数的天花板：</strong>在百万时间线的无过滤 histogram 上，默认限制会让 Prometheus 和 Mimir 直接拒绝这条查询。把限制调到同一水平后，四套系统都能跑完——3 小时窗口下 OpenObserve 只用 27 秒，另两者分别是 3.2 分钟和 4.1 分钟</li>
+    <li><strong>格式之争：</strong>在过滤查询上，Vortex 比 Parquet 快 2.9–3.2 倍，全量扫描时打平——对于仪表盘那类带过滤的负载，Vortex 是更好的默认选择</li>
   </ul>
 
   <div class="pull">
-    In high-cardinality metrics, the real dividing line isn't a few hundred milliseconds of latency — it's <strong>whether your queries still return at all once series counts cross a million</strong>.
+    在高基数指标场景里，真正的分水岭不是几百毫秒的延迟——而是<strong>当时间线数量越过一百万之后，你的查询还能不能返回结果</strong>。
   </div>
 
   <div class="footnote">
-    <strong>Test notes:</strong>
+    <strong>测试说明：</strong>
     <ul>
-      <li>Versions: Prometheus <code>v3.6.0</code>, Mimir <code>grafana/mimir:latest</code>, OpenObserve <code>v0.92.0</code>; the two OpenObserve deployments differ only in <code>ZO_FILE_FORMAT</code> (parquet/vortex)</li>
-      <li>Mimir's ingestion limits (ingestion_rate, max_global_series_per_user, etc.) were raised so writes were never throttled by defaults; the query-side chunk limit was raised to 20e6 for the same reason as Prometheus's sample limit</li>
-      <li>One dedicated EC2 m7gd.2xlarge per system: 7 CPU, 474 GB local NVMe, container memory limit 28 GB then 14 GB, all single-node deployments</li>
-      <li>All query caches disabled; OpenObserve's Parquet filter pushdown disabled (<code>ZO_FEATURE_PUSHDOWN_FILTER_ENABLED=false</code> — on by default, but ~20% slower in our metrics tests)</li>
-      <li>Data generated by fake-webserver on 24 pods (~45k bucket series each, ~1.09M total), shipped through a standalone OTel Collector writing to all systems simultaneously; ~2.2B samples across the <code>codelab_api_*</code> metrics, measured as 44.3M samples per 10 minutes scaled to the 8h23m run</li>
-      <li>Ingestion 2026-08-09 04:47–13:10 UTC, then stopped; query windows of 30m / 1h / 3h / 6h all ending 2026-08-09 12:00 UTC; every query run 3 times, plus one cold first-touch request excluded from the medians</li>
-      <li>Prometheus / Mimir errors stem from default protective limits; raising them may allow completion at the cost of higher per-query memory risk</li>
-      <li>Multipliers are rounded — the point is the order of magnitude, not the decimals</li>
+      <li>版本：Prometheus <code>v3.6.0</code>、Mimir <code>grafana/mimir:latest</code>、OpenObserve <code>v0.92.0</code>；两套 OpenObserve 部署只有 <code>ZO_FILE_FORMAT</code>（parquet/vortex）不同</li>
+      <li>Mimir 的写入限制（ingestion_rate、max_global_series_per_user 等）都被调高，以免写入被默认值限流；查询侧的 chunk 限制调到 20e6，理由与 Prometheus 的样本限制相同</li>
+      <li>每套系统独占一台 EC2 m7gd.2xlarge：7 核 CPU、474 GB 本地 NVMe，容器内存上限先 28 GB 后 14 GB，全部为单节点部署</li>
+      <li>所有查询缓存关闭；OpenObserve 的 Parquet 过滤下推关闭（<code>ZO_FEATURE_PUSHDOWN_FILTER_ENABLED=false</code>——默认开启，但在我们的指标测试中反而慢约 20%）</li>
+      <li>数据由 24 个 Pod 上的 fake-webserver 生成（每个约 4.5 万条 bucket 时间线，合计约 109 万条），经由一个独立部署的 OTel Collector 同时写入所有系统；<code>codelab_api_*</code> 系列指标合计约 22 亿个样本，由实测的每 10 分钟 4,430 万个样本按 8 小时 23 分的时长换算得出</li>
+      <li>写入时间 2026-08-09 04:47–13:10 UTC，随后停止；查询窗口 30m / 1h / 3h / 6h，均以 2026-08-09 12:00 UTC 结束；每条查询运行 3 次，另有一次冷启动首访请求不计入中位数</li>
+      <li>Prometheus / Mimir 的报错源自默认的保护性限制；调高它们可以让查询跑完，代价是单条查询的内存风险更高</li>
+      <li>倍数均为约数——重点是数量级，而不是小数点后的位数</li>
     </ul>
   </div>
 
