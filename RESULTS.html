@@ -414,7 +414,7 @@
   <figure>
     <svg width="100%" viewBox="0 0 680 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="6-hour filtered histogram_quantile query, latency across four systems">
       <text x="40" y="34" font-family="sans-serif" font-size="15" font-weight="600" fill="#1a1a17">histogram_quantile + label filter, 6-hour window (median)</text>
-      <text x="40" y="56" font-family="sans-serif" font-size="12" fill="#8a8a82">Same data · same PromQL · frozen dataset · local NVMe · unit: ms</text>
+      <text x="40" y="56" font-family="sans-serif" font-size="12" fill="#8a8a82">Same data · same PromQL · frozen dataset · local NVMe · 28 GB memory limit · unit: ms</text>
 
       <rect x="200" y="88" width="440" height="44" rx="3" fill="#185fa5" opacity="0.92"/>
       <text x="192" y="116" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">O2 · Parquet</text>
@@ -438,7 +438,7 @@
       <text x="537" y="285" text-anchor="middle" font-family="sans-serif" font-size="18" font-weight="700" fill="#ffffff">Vortex ≈ 3.3×</text>
       <text x="537" y="305" text-anchor="middle" font-family="sans-serif" font-size="10.5" fill="#d4ebe2">faster than Parquet · 2.0× vs Prometheus</text>
     </svg>
-    <figcaption>Figure 1 · 6-hour filtered histogram query. Bar lengths drawn to real scale: Vortex 2,422ms, Parquet 7,950ms.</figcaption>
+    <figcaption>Figure 1 · 6-hour filtered histogram query, at the 28 GB memory limit. Bar lengths drawn to real scale. Parquet is last here and that is the finding, not a glitch: a selective filter over a wide window is where a full-scan columnar layout costs the most, and where Vortex's gains the most.</figcaption>
   </figure>
 
   <h2>The setup</h2>
@@ -564,7 +564,7 @@ limits:
       <rect x="108" y="284" width="521.4" height="11" rx="2" fill="#0f6e56" opacity="0.92"/>
       <text x="637" y="293" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">28</text>
     </svg>
-    <figcaption>Figure 2 · Resource usage while ingesting ~1.09M bucket series. Each group normalized to its max.</figcaption>
+    <figcaption>Figure 2 · Resource usage while ingesting ~1.09M bucket series at the 28 GB memory limit, sampled every 10 minutes over 8h23m. Each group normalized to its max. Memory is RSS; Mimir's disk is provisional (see notes).</figcaption>
   </figure>
 
   <p>Three observations:</p>
@@ -680,7 +680,7 @@ selected by the query.</code></pre>
       <rect x="460" y="108" width="29.7" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
       <text x="636" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">46.8s</text>
     </svg>
-    <figcaption>Figure 3 · Million-series unfiltered histogram. Striped bars indicate the query failed with an error.</figcaption>
+    <figcaption>Figure 3 · Million-series unfiltered histogram at the 28 GB memory limit. At 14 GB Prometheus is OOMKilled on both of these windows.</figcaption>
   </figure>
 
   <div class="pull">
@@ -809,7 +809,7 @@ selected by the query.</code></pre>
       <rect x="460" y="240" width="29.7" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
       <text x="636" y="252" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">46.8s</text>
     </svg>
-    <figcaption>Figure 4 · All four query types (unit: ms). Linear scale, each group normalized to its max; striped bars indicate errors.</figcaption>
+    <figcaption>Figure 4 · All four query types over the 6-hour window at the 28 GB memory limit (unit: ms). Linear scale, each group normalized to its max.</figcaption>
   </figure>
 
   <h2>Parquet vs Vortex: same engine, two file formats</h2>
@@ -892,7 +892,7 @@ selected by the query.</code></pre>
       <rect x="460" y="204" width="57.8" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
       <text x="636" y="216" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2666</text>
     </svg>
-    <figcaption>Figure 5 · Filtered histogram, Parquet vs Vortex across all four windows.</figcaption>
+    <figcaption>Figure 5 · Filtered histogram, Parquet vs Vortex across all four windows, at the 28 GB memory limit.</figcaption>
   </figure>
 
   <p>The pattern is remarkably stable and widens with the window: 2.9× at 30m, 3.0× at 1h, 3.3× at 3h and 3.3× at 6h. At the 6-hour window Parquet is slower than both Prometheus and Mimir on this query while Vortex is roughly twice as fast as either — <strong>for dashboard-style filtered workloads the format choice is worth more than the engine choice</strong>.</p>
