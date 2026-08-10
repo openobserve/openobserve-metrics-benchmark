@@ -1,7 +1,7 @@
 # Where things stand — 2026-08-10 14:10 CST
 
 Working notes, not part of the published benchmark. Delete when the churn
-experiment is finished and its findings are folded into RESULTS.
+experiment is finished and deploy is back to the published configuration.
 
 ## Published results are final
 
@@ -52,6 +52,12 @@ Re-label before any install on a rebuilt cluster, or the pods will not schedule.
 
 ## Churn experiment — running now
 
+**Diagnostic only. It does not update RESULTS.** It exists to explain why Mimir
+measured ~2x faster and OpenObserve ~2x slower than the original article: the
+hypothesis is that the original run accumulated ~2M series in the in-memory
+index while the query window held only ~1M. Whatever it finds stays in these
+notes.
+
 Testing whether a system pays for the series in the query window or the series
 in its index.
 
@@ -73,6 +79,16 @@ so A/B ≈ 3× means cost follows series count, and A/B ≈ 1× means it follows
 samples or index size (that pair cannot separate those two). C `[1h,2h]` and D
 `[4h,5h]` are the control: identical in every respect but position, so C/D far
 from 1× means the A/B result cannot be read.
+
+**When it is done, put deploy back to normal:**
+
+```bash
+deploy/set-dataset.sh run-a && deploy/install-all.sh
+```
+
+`run-a` is the published dataset. Confirm cardinality is 1,085,760 at
+`END_TIME=1786276800` and that `fake-webserver` is at 24 replicas in the deploy
+file (churn-run.sh only scales it at runtime; the file is untouched).
 
 **What the rehearsal taught:** at `HOUR=300` the numbers were pure noise —
 the o2-vortex control read 4.00× where it must read ~1×, and single runs swung
