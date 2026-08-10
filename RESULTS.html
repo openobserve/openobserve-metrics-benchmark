@@ -408,7 +408,7 @@
     Then we ran the whole thing twice, changing only the memory limit — 28 GB, then 14 GB — because those turn out to answer different questions.
   </div>
 
-  <p>The contenders are four deployments with fully aligned configurations: <strong>Prometheus, Grafana Mimir, OpenObserve (Parquet format), and OpenObserve (Vortex format)</strong>. Each system gets a dedicated EC2 m7gd.2xlarge with its data on the node's <strong>local NVMe</strong>, query caches disabled, the same pinned time range, and identical query limits and timeouts. Ingestion is stopped before measuring, so all four query a frozen, identical dataset. The whole benchmark was then run twice, changing only the container memory limit — <strong>28 GB</strong>, then <strong>14 GB</strong> — because those answer different questions: how fast, and what still runs at all.</p>
+  <p>The contenders are four deployments with fully aligned configurations: <strong>Prometheus, Grafana Mimir, OpenObserve (Parquet format), and OpenObserve (Vortex format)</strong>. Each gets a dedicated EC2 m7gd.2xlarge with its data on the node's <strong>local NVMe</strong>, query caches disabled, and identical query limits and timeouts — so that neither the disk nor a protective default decides the outcome. The two memory limits answer different questions: at 28 GB, how fast; at 14 GB, what still runs at all.</p>
 
   <!-- Hero chart: 3h filtered histogram -->
   <figure>
