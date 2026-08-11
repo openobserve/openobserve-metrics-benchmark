@@ -51,7 +51,7 @@ Nodes are now labelled `perf-system=<name>` and each deploy file selects on it:
 
 Re-label before any install on a rebuilt cluster, or the pods will not schedule.
 
-## Churn experiment — done, inconclusive
+## Churn experiment — done; Mimir explained, OpenObserve not
 
 Diagnostic only; it did not change RESULTS. Dataset `run-b` is still on the
 instance store if anyone wants to re-query it.
@@ -117,13 +117,82 @@ per-series depth.
   at all, so series churn would not have made it slower. Its ~2x slowdown
   against the original article remains unaccounted for.
 
+### Round-hour re-measurement, and what it settled
+
+The first pass anchored windows to when the load generator came up (:03:42),
+which put batch boundaries inside the windows and straddled the epoch-aligned
+2h TSDB block boundaries Prometheus and Mimir cut on. Re-running on round hours
+fixed both and produced a working control (two windows holding identical series
+at different positions).
+
+**Positional noise floor**, measured on byte-identical windows:
+
+| | Prometheus | Mimir | O2 Parquet | O2 Vortex |
+| --- | --- | --- | --- | --- |
+| noise | 0.89-1.31x | 1.25-1.26x | 0.81-1.01x | 0.84-1.01x |
+
+Prometheus and Mimir swing 16-31% on identical data depending on where the
+window sits. OpenObserve is flat to 1-4% at 1h; its 0.81x at 3h is the one
+exception and is unexplained.
+
+**Series scaling at 3h, samples held constant (318-325M), 720 points:**
+
+| Series | Prometheus | Mimir | O2 Parquet | O2 Vortex |
+| --- | --- | --- | --- | --- |
+| 904,800 | 1,650 | 1,729 | 2,652 | 808 |
+| 1,357,200 | 1,719 / 1,921 | 4,655 / 5,852 | 2,106 / 2,598 | 693 / 825 |
+| 1,809,600 | 1,997 | 6,104 | 2,617 | 805 |
+| **2.00x ratio** | **1.21x** | **3.53x** | **0.99x** | **1.00x** |
+
+**Mimir has a cardinality cliff, not a slope.** It jumps 2.7-3.4x between
+904,800 and 1,357,200 series and then plateaus (+4% for a further 1.33x). The
+cliff clears Mimir's 1.26x noise floor by 2-3x; the plateau does not. Published
+run-a holds 1,085,760 series, which sits *inside* the un-probed 905k-1.36M gap,
+so the knee is bracketed but not located. Empirically run-a shows no
+degradation (Mimir 4,416ms vs Prometheus 4,798ms at 6h filtered).
+
+**OpenObserve does not track series count at all** -- 2.00x the series costs
+0.99x/1.00x, less than its own positional noise.
+
+### What OpenObserve does track: samples, not output points
+
+Decisive test, series pinned at 452,400 (all windows inside batch 4), varying
+samples and points independently:
+
+| Manipulation | O2 Parquet | O2 Vortex |
+| --- | --- | --- |
+| control, identical window at a later hour | 1.01x | 0.97x |
+| **2x samples**, points fixed at 240 | **1.81x** | **1.66x** |
+| **2x points**, samples fixed at 217M | 1.03x | 1.03x |
+
+This is the architectural inverse of the other two: the step study showed
+36->720 points moving Prometheus 1.68->3.92s and Mimir 1.14->4.11s on a fixed
+window. **Prometheus and Mimir bill per output point; OpenObserve bills per
+sample scanned.**
+
+**Unresolved:** at 1h, 452,400 vs 904,800 series at equal samples and equal
+points measured 496ms vs 937ms (1.89x) with a clean 1.01x control -- which the
+samples-only model cannot explain, and which the 3h windows contradict despite
+having the same shallow-fragment structure. Second time this dataset disagreed
+between 1h and 3h. Treat 1h results from it with suspicion.
+
+### Does it explain the delta against the original article?
+
+**The Mimir half, yes.** At ~1.8M series Mimir is 3.5x slower than at 905k. If
+the original run accumulated ~2M through pod rescheduling, it was past the
+cliff; run-a at 1.09M is not. That is sufficient to explain Mimir measuring
+~2x faster here.
+
+**The OpenObserve half, no.** OpenObserve shows no series sensitivity whatever,
+so churn cannot have slowed it. Its ~2x gap against the original article
+remains unexplained.
+
 ### If anyone reruns it
 
-Fix the control first. Make the batches non-overlapping by scaling to 0, waiting
-past the scrape interval, then scaling back up — `rollout restart` overlaps old
-and new pods for ~30-60s, which is what contaminated C. And add a third window
-pair that varies series count at *both* constant samples and constant per-series
-depth, or the confound above returns.
+Use round-hour windows. Fix the batch overlap by scaling to 0, waiting past the
+scrape interval, then scaling back up -- `rollout restart` runs old and new pods
+together for ~30-60s. And probe 0.9M-1.4M finely if the goal is to locate
+Mimir's knee rather than bracket it.
 
 ## Open question, unresolved
 
