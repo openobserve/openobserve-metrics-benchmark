@@ -170,11 +170,37 @@ This is the architectural inverse of the other two: the step study showed
 window. **Prometheus and Mimir bill per output point; OpenObserve bills per
 sample scanned.**
 
-**Unresolved:** at 1h, 452,400 vs 904,800 series at equal samples and equal
-points measured 496ms vs 937ms (1.89x) with a clean 1.01x control -- which the
-samples-only model cannot explain, and which the 3h windows contradict despite
-having the same shallow-fragment structure. Second time this dataset disagreed
-between 1h and 3h. Treat 1h results from it with suspicion.
+**Series does matter, up to a ceiling.** A 2h sweep at constant width, points
+and samples (~217M) found it:
+
+| Series | O2 Parquet | vs 452k | O2 Vortex | vs 452k |
+| --- | --- | --- | --- | --- |
+| 452,400 | 918 | 1.00x | 291 | 1.00x |
+| 904,800 | 1,758 | **1.92x** | 513 | **1.76x** |
+| 1,357,200 | 1,781 / 1,755 | 1.94x / 1.91x | 520 / 525 | 1.79x / 1.80x |
+
+Cost rises nearly proportionally to ~900k series and is flat above it: 452k to
+905k almost doubles the time, 905k to 1,357k adds 1%. The samples term has no
+such ceiling (2x samples costs 1.81x at every width tested).
+
+That reconciles the readings that looked contradictory:
+
+| Test | Series range | Region | Measured |
+| --- | --- | --- | --- |
+| 1h | 452k -> 905k | linear | 1.89x |
+| 2h | 452k -> 905k | linear | 1.92x |
+| 2h | 905k -> 1,357k | saturated | 1.01x |
+| 3h | 905k -> 1,810k | saturated | 0.99x |
+
+The 3h test showed nothing because both of its points were already past the
+ceiling. So: **time tracks samples, and tracks series up to ~900k, above which
+extra series are free.**
+
+Caveat: the 905k control failed (1,758 vs 1,259 ms, 1.40x). The faster window,
+14:00-16:00, is the only one starting before ingestion began, so it holds 1h56m
+of data and 210M samples rather than 217M -- which does not account for 40%. The
+figures above use 17:00-19:00, which sits mid-dataset like the rest. The
+1,357,200 control is clean (1.01x) and the saturation conclusion rests on it.
 
 ### Does it explain the delta against the original article?
 
