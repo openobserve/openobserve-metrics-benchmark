@@ -1,8 +1,34 @@
 # Where things stand — 2026-08-10 14:10 CST
 
-Working notes, not part of the published benchmark. The churn experiment is
-finished and deploy is back to the published configuration (`run-a`, 28 GB,
-all four pinned, cardinality verified at 1,085,760).
+Working notes, not part of the published benchmark. All testing is finished.
+
+## Final state (2026-08-11)
+
+- Deploy files describe the **published** configuration: `run-a`, 28 GB, all
+  four pinned to their nodes. Verified at 1,085,760 series before shutdown.
+- **Prometheus and Mimir are scaled to 0.** Their data is untouched on the node
+  instance stores; `kubectl -n perf-prometheus scale sts prometheus-standalone
+  --replicas=1` brings them back.
+- Both OpenObserve deployments and the `bench` runner pod are still up.
+- `fake-webserver` is at 0 replicas; 24 in the deploy file.
+- `ZO_METRICS_INLIST_FILTER_ENABLED` was used for one experiment (below) and
+  **reverted**, so the repo still matches what produced RESULTS.
+
+### Disk on the nodes right now
+
+| Node | run-a | run-b | run-rehearsal |
+| --- | --- | --- | --- |
+| ip-10-1-89-108 prometheus | 11G | 4.4G | 452M |
+| ip-10-1-86-16 mimir | **26G** | 4.8G | 1.4G |
+| ip-10-1-64-74 o2-parquet | 28G | 8.7G | 1.4G |
+| ip-10-1-89-244 o2-vortex | 27G | 8.4G | 1.4G |
+
+**Mimir's run-a reads 26G, but RESULTS publishes 18G, and 18G is the correct
+figure.** It was measured at stop+14.8h on an instance that had not been
+touched since ingestion stopped. This investigation restarted Mimir many times;
+each restart re-runs compaction and re-arms `deletion_delay: 12h`, so the
+superseded blocks came back. Do not "correct" the published number from a
+reading taken today -- it would need another ~14h undisturbed to settle again.
 
 ## Published results are final
 
