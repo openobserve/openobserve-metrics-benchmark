@@ -2,6 +2,36 @@
 
 Working notes, not part of the published benchmark. All testing is finished.
 
+## Done (2026-08-12): RESULTS re-run on /api/bar
+
+The published filtered-histogram numbers used `/api/service-1`, one of 50
+generated endpoints carrying 25,740 series. The four fixed endpoints
+(`/api/foo`, `/api/bar`, `/api/baz`, `/api/boom`) carry 51,480 each -- double --
+so the choice silently halved the filtered figures. Both rounds re-run on
+`/api/bar`; `bench/config.sh` now defaults to it.
+
+- [x] back up run-a (all four, diff -rq IDENTICAL) -- backups now cover
+      run-a, run-b, run-c under /mnt/k8s-disks/0/backup/
+- [x] O2 back to openobserve/openobserve:v0.92.0 BEFORE mounting run-a, so rc3
+      never touched it; ZO_COMPACT_MAX_FILE_SIZE removed
+- [x] Round 1 at 28 GB, Round 2 at 14 GB, deploy files back to 28G
+- [x] RESULTS.md / .html / .zh.html / README.md updated and cross-checked
+
+**What changed in the conclusions.** Prometheus and Mimir roughly double when
+the filter matches twice the series (1.93x, 1.80x); OpenObserve moves 2%. So
+Parquet went from *slowest of four* on the light path to *third, ahead of
+Prometheus* on the heavy one -- without Parquet changing at all. The old text
+read that as a Parquet weakness; it is really a statement about how the other
+two scale. RESULTS now says so, and carries a table showing both paths.
+
+Round 2 reproduced the OOMKill exactly: restartCount=2, OOMKilled, exitCode=137,
+157s then instant connection-refused at 3h, 193s at 6h.
+
+**Trap when editing the HTML:** a blanket numeric substitution corrupted the
+Mimir brand colour, because `7517` matched inside `#ba7517`. Scope replacements
+to `<td>` and `<text>` content. The SVG bar widths also encode the values and
+must be rescaled per panel, or the labels and bars disagree.
+
 ## Final state (2026-08-11)
 
 - Deploy files describe the **published** configuration: `run-a`, 28 GB, all

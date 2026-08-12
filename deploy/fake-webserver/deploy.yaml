@@ -19,7 +19,7 @@ metadata:
   labels:
     app: fake-webserver
 spec:
-  replicas: 24
+  replicas: 33
   selector:
     matchLabels:
       app: fake-webserver

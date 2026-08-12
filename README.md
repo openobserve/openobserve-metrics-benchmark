@@ -36,33 +36,42 @@ that scans everything — `histogram_quantile` over all 1,085,760 bucket series,
 | System | Latency |
 | --- | --- |
 | Prometheus | 4m 28s |
-| Mimir | 4m 15s |
-| OpenObserve · Parquet | 47.8s |
-| **OpenObserve · Vortex** | **44.4s** |
+| Mimir | 3m 55s |
+| OpenObserve · Parquet | 46.9s |
+| **OpenObserve · Vortex** | **45.5s** |
 
 At stock settings none of the three systems runs this query at all — they
 refuse it on protective defaults. The benchmark raises those limits uniformly
 so the engines decide the outcome instead. See
 [deploy/README.md](deploy/README.md#query-limits).
 
-**Filter to one path out of 54 and the ranking inverts**, splitting the two
-OpenObserve formats. Same window, same step:
+**Filter to a single path and the ranking tightens.** Same window, same step,
+filtering on `/api/bar`:
 
 | System | Latency (ms) |
 | --- | --- |
-| OpenObserve · Parquet | 8,199 |
-| Prometheus | 4,798 |
-| Mimir | 4,416 |
-| **OpenObserve · Vortex** | **2,549** |
+| Prometheus | 9,237 |
+| OpenObserve · Parquet | 8,336 |
+| Mimir | 7,955 |
+| **OpenObserve · Vortex** | **3,022** |
 
-Vortex wins by 1.9× over Prometheus; Parquet *loses* to it by 1.7×. A selective
-filter is what Vortex's layout exploits and what a full-scan columnar format
-does not — for dashboard-style filtered work the format choice is worth more
-than the engine choice.
+Vortex wins by 3.1× over Prometheus and 2.8× over Parquet. A selective filter is
+what Vortex's layout exploits and what a full-scan columnar format does not —
+for dashboard-style filtered work the format choice is worth more than the
+engine choice.
+
+**Which path you filter on changes this table**, so it is worth stating.
+fake-webserver produces 54 paths in two classes: 50 generated
+(`/api/service-1`…`50`) at 25,740 bucket series each, and 4 fixed
+(`/api/foo`, `/api/bar`, `/api/baz`, `/api/boom`) at **51,480**. Doubling the
+matched series roughly doubles Prometheus (1.93×) and Mimir (1.80×) but moves
+Parquet by 2% — so on a generated path Parquet is the slowest of the four, and
+on a fixed one it edges past Prometheus. `PATH_FILTER` in `bench/config.sh`
+selects it; RESULTS uses `/api/bar`.
 
 And the result that is not about milliseconds. Run the same benchmark again with
 the memory limit halved to **14 GB**, and almost nothing changes — every cell
-lands within 5% — *except* that Prometheus is **OOMKilled** on the
+lands within 8% — *except* that Prometheus is **OOMKilled** on the
 million-series unfiltered histogram at 3h and 6h. That one query peaks at
 18.7 GB RSS in Prometheus against 4.25 GB in Mimir; raising
 `--query.max-samples` so it can run at all and having it consume 20 GB are the

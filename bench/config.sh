@@ -41,11 +41,16 @@ SYSTEMS=(
 # Query parameters
 # -----------------------------------------------------------------------------
 
-# The `$path` in the article's filtered queries. fake-webserver generates
-# /api/service-1 .. /api/service-50 plus /api/foo, /api/bar, /api/baz, /api/boom
-# -- 54 paths, so one path selects roughly 1/54 of the bucket series.
-# `./cardinality.sh paths` lists what your deployment actually produced.
-: "${PATH_FILTER:=/api/service-1}"
+# The `$path` in the filtered queries. fake-webserver produces 54 paths, but
+# NOT of equal weight -- they come in two classes:
+#
+#   /api/service-1 .. /api/service-50   25,740 bucket series each
+#   /api/foo /api/bar /api/baz /api/boom   51,480 each  (exactly 2x)
+#
+# So the filtered-histogram numbers roughly double depending on which class you
+# pick. RESULTS uses /api/bar; a generated path measures about half of what is
+# published there. `./cardinality.sh paths` lists what your deployment produced.
+: "${PATH_FILTER:=/api/bar}"
 
 # Query windows, in seconds: 30m, 1h, 3h, 6h.
 : "${WINDOWS:=1800 3600 10800 21600}"

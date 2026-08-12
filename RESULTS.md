@@ -85,6 +85,18 @@ is exactly 26× the `_count` count: 25 explicit buckets plus `+Inf`.
 Ingestion delivers **44.3M samples per 10 minutes**, or **~2.2 billion** across
 the 8h23m run.
 
+The 54 `path` values are **not equal in weight**, which matters for the filtered
+queries below:
+
+| Path class | Count | Bucket series each |
+| --- | --- | --- |
+| `/api/service-1` … `/api/service-50` | 50 | 25,740 |
+| `/api/foo`, `/api/bar`, `/api/baz`, `/api/boom` | 4 | **51,480** |
+
+The filtered histograms here use **`/api/bar`**, one of the heavier four. A
+generated path measures roughly half these numbers, so quote which path you
+filtered on — `bench/config.sh` sets it with `PATH_FILTER`.
+
 The 6-hour window holds **361 of 361 expected sample points with no gaps**, at an
 average cardinality of 41,759 — 100.00% of full.
 
@@ -110,13 +122,13 @@ sum by (path) (irate(codelab_api_request_duration_seconds_count[1m]))
 
 | Window | Step | Prometheus | Mimir | O2 · Parquet | O2 · Vortex |
 | --- | --- | --- | --- | --- | --- |
-| 30m | 15s | 1,332 | 1,216 | **105** | 132 |
-| 1h | 15s | 2,393 | 2,254 | 231 | **215** |
-| 3h | 15s | 7,517 | 8,630 | 664 | **587** |
-| 6h | 30s | 10,991 | 8,814 | 1,143 | **1,018** |
+| 30m | 15s | 1,457 | 1,215 | 94 | **93** |
+| 1h | 15s | 2,390 | 2,197 | 168 | **160** |
+| 3h | 15s | 7,589 | 8,324 | **507** | 512 |
+| 6h | 30s | 10,311 | 8,112 | 1,067 | **1,026** |
 
 Over 41,760 series. OpenObserve answers in under a second on every window; at 6h
-it is **10.8× faster than Prometheus** and 8.7× faster than Mimir. The two
+it is **9.7× faster than Prometheus** and 7.6× faster than Mimir. The two
 formats tie — nothing here for Vortex's layout to exploit.
 
 ### 2 · Unfiltered histogram
@@ -130,10 +142,10 @@ No label filter: `rate` + aggregation over all 1,085,760 series.
 
 | Window | Step | Prometheus | Mimir | O2 · Parquet | O2 · Vortex |
 | --- | --- | --- | --- | --- | --- |
-| 30m | 15s | 35,517 | 34,904 | 4,796 | **4,301** |
-| 1h | 15s | 62,055 | 64,813 | 7,902 | **7,452** |
-| 3h | 15s | 189,565 | 245,369 | 29,369 | **27,497** |
-| 6h | 30s | 268,419 | 255,386 | 47,785 | **44,398** |
+| 30m | 15s | 38,348 | 32,491 | **4,387** | 4,388 |
+| 1h | 15s | 64,960 | 62,345 | 8,022 | **7,483** |
+| 3h | 15s | 190,735 | 235,490 | **26,581** | 28,396 |
+| 6h | 30s | 267,799 | 234,899 | 46,875 | **45,503** |
 
 **All four complete every window — but only because the limits were raised, on
 all three systems.** At stock settings Prometheus rejects this query outright
@@ -146,50 +158,70 @@ this repo raises all of them — `--query.max-samples=1e9`,
 engines decide the outcome rather than the defaults. The full list is in
 [deploy/README.md](deploy/README.md#query-limits).
 
-Once they do run it, OpenObserve is **6.0× faster than Prometheus** and 5.8×
-faster than Mimir at 6h — 44 seconds against 4.5 and 4.3 minutes.
+Once they do run it, OpenObserve is **5.9× faster than Prometheus** and 5.2×
+faster than Mimir at 6h — 46 seconds against 4.5 and 3.9 minutes.
 
 ### 3 · Filtered histogram (regex match)
 
 ```promql
 histogram_quantile(0.9, sum by(le, path) (
-  rate(codelab_api_request_duration_seconds_bucket{path=~"/api/service-1"}[5m])))
+  rate(codelab_api_request_duration_seconds_bucket{path=~"/api/bar"}[5m])))
 ```
 
 | Window | Step | Prometheus | Mimir | O2 · Parquet | O2 · Vortex |
 | --- | --- | --- | --- | --- | --- |
-| 30m | 15s | 610 | 606 | 744 | **255** |
-| 1h | 15s | 1,085 | 1,123 | 1,151 | **403** |
-| 3h | 15s | 3,526 | 4,249 | 4,336 | **1,353** |
-| 6h | 30s | 4,798 | 4,416 | 8,199 | **2,549** |
+| 30m | 15s | 1,245 | 1,129 | 707 | **261** |
+| 1h | 15s | 2,193 | 2,144 | 1,207 | **437** |
+| 3h | 15s | 6,887 | 8,070 | 4,530 | **1,602** |
+| 6h | 30s | 9,237 | 7,955 | 8,336 | **3,022** |
 
 ### 4 · Filtered histogram (equality match)
 
 ```promql
 histogram_quantile(0.9, sum by(le, path) (
-  rate(codelab_api_request_duration_seconds_bucket{path="/api/service-1"}[5m])))
+  rate(codelab_api_request_duration_seconds_bucket{path="/api/bar"}[5m])))
 ```
 
 | Window | Step | Prometheus | Mimir | O2 · Parquet | O2 · Vortex |
 | --- | --- | --- | --- | --- | --- |
-| 30m | 15s | 603 | 608 | 663 | **248** |
-| 1h | 15s | 1,119 | 1,137 | 1,126 | **444** |
-| 3h | 15s | 3,627 | 4,239 | 4,473 | **1,317** |
-| 6h | 30s | 4,770 | 4,417 | 7,986 | **2,404** |
+| 30m | 15s | 1,288 | 1,126 | 712 | **316** |
+| 1h | 15s | 2,260 | 2,172 | 1,178 | **445** |
+| 3h | 15s | 6,958 | 8,090 | 4,530 | **1,643** |
+| 6h | 30s | 9,226 | 7,935 | 8,331 | **2,903** |
 
 Queries 3 and 4 are a pair to show the **filter type barely matters** — regex
 and equality land within 3% of each other everywhere. Scan volume is the
 variable, not matcher syntax.
 
-Filtering one path out of 54 changes the ranking completely, and it splits the
-two OpenObserve formats:
+Filtering to one path changes the ranking, and it splits the two OpenObserve
+formats:
 
-- **Vortex wins outright**, by 1.9× over Prometheus and 1.7× over Mimir at 6h.
-- **Parquet loses to both**, and the gap widens with the window: level at 30m,
-  1.7× slower than Prometheus at 6h.
+- **Vortex wins outright**, by 3.1× over Prometheus and 2.6× over Mimir at 6h.
+- **Parquet is the weakest of the three at every window except the widest**,
+  where it edges past Prometheus (8,336 against 9,237) and is level with Mimir.
 
 A selective filter is exactly what Vortex's layout exploits and what a
 full-scan columnar format does not.
+
+### The filter is where the systems stop scaling alike
+
+Parquet's relative position improves as the filter gets heavier, and that is
+worth stating precisely, because it is a property of the *other two* systems
+rather than of Parquet. Measured at 6h against a path carrying half the series
+(`/api/service-1`, 25,740 series) and the one published here (`/api/bar`,
+51,480):
+
+| 6h, filtered (ms) | 25,740 series | 51,480 series | ratio |
+| --- | --- | --- | --- |
+| Prometheus | 4,798 | 9,237 | 1.93× |
+| Mimir | 4,416 | 7,955 | 1.80× |
+| O2 · Parquet | 8,199 | 8,336 | **1.02×** |
+| O2 · Vortex | 2,549 | 3,022 | 1.19× |
+
+**Prometheus and Mimir cost scales with the series the filter matches;
+OpenObserve's barely moves.** Double the matched series and they roughly double;
+Parquet changes by 2%. So which system looks better on a filtered query depends
+on how selective the filter is — a fact no single row of a table can express.
 
 ## Round 2 · 14 GB of memory
 
@@ -197,13 +229,13 @@ Same dataset, same queries, half the memory. **Only one thing breaks.**
 
 | Query | Window | Prometheus | Mimir | O2 · Parquet | O2 · Vortex |
 | --- | --- | --- | --- | --- | --- |
-| irate | 6h | 10,870 | 8,820 | 1,153 | **964** |
-| Unfiltered histogram | 3h | **OOMKilled** | 245,206 | 27,981 | **26,306** |
-| Unfiltered histogram | 6h | **OOMKilled** | 255,710 | 45,594 | **43,570** |
-| Filtered, regex | 6h | 4,764 | 4,418 | 7,647 | **2,405** |
-| Filtered, equality | 6h | 4,764 | 4,427 | 7,650 | **2,480** |
+| irate | 6h | 10,244 | 8,084 | 1,106 | **1,042** |
+| Unfiltered histogram | 3h | **OOMKilled** | 236,270 | 27,305 | **26,200** |
+| Unfiltered histogram | 6h | **OOMKilled** | 234,957 | 44,354 | **42,420** |
+| Filtered, regex | 6h | 9,213 | 7,945 | 8,003 | **2,794** |
+| Filtered, equality | 6h | 9,183 | 7,954 | 8,016 | **2,827** |
 
-Everything else lands within 5% of its 28 GB value. Halving the memory changes
+Everything else lands within 8% of its 28 GB value. Halving the memory changes
 almost nothing — **except that Prometheus can no longer answer the
 million-series histogram at all.**
 
@@ -213,13 +245,13 @@ Prometheus restarted twice, both times mid-query:
 
 | Request | Started | Ran for | Outcome |
 | --- | --- | --- | --- |
-| unfiltered · 3h | 16:42:36Z | 158s | OOMKilled |
-| unfiltered · 3h (retry) | 16:45:14Z | 4ms | connection refused, pod restarting |
-| unfiltered · 6h | 16:55:13Z | 192s | OOMKilled |
-| unfiltered · 6h (retry) | 16:58:26Z | 4ms | connection refused, pod restarting |
+| unfiltered · 3h | 02:31:14Z | 157s | OOMKilled |
+| unfiltered · 3h (retry) | 02:33:52Z | 3ms | connection refused, pod restarting |
+| unfiltered · 6h | 02:43:31Z | 193s | OOMKilled |
+| unfiltered · 6h (retry) | 02:46:44Z | 8ms | connection refused, pod restarting |
 
 `restartCount=2`, `lastState.terminated.reason=OOMKilled`, `exitCode=137`, and
-`finishedAt=16:58:26Z` matches the last request to the second.
+`finishedAt=02:46:44Z` matches the last request to the second.
 
 This is worth stating carefully, because `curl` cannot see the difference: an
 OOMKill and a network failure both surface as HTTP 000. The harness records a
@@ -250,10 +282,10 @@ between an answer and a restart.
 
 | Query | Prometheus | Mimir | O2 · Parquet | O2 · Vortex |
 | --- | --- | --- | --- | --- |
-| irate | 10,991 | 8,814 | 1,143 | **1,018** |
-| Unfiltered histogram | 268,419 | 255,386 | 47,785 | **44,398** |
-| Histogram, regex filter | 4,798 | 4,416 | 8,199 | **2,549** |
-| Histogram, equality filter | 4,770 | 4,417 | 7,986 | **2,404** |
+| irate | 10,311 | 8,112 | 1,067 | **1,026** |
+| Unfiltered histogram | 267,799 | 234,899 | 46,875 | **45,503** |
+| Histogram, regex filter | 9,237 | 7,955 | 8,336 | **3,022** |
+| Histogram, equality filter | 9,226 | 7,935 | 8,331 | **2,903** |
 
 ## Parquet vs Vortex
 
@@ -267,13 +299,13 @@ within 10%.
 
 | Filtered histogram, regex (ms) | 30m | 1h | 3h | 6h |
 | --- | --- | --- | --- | --- |
-| Parquet | 744 | 1,151 | 4,336 | 8,199 |
-| Vortex | **255** | **403** | **1,353** | **2,549** |
-| Vortex advantage | 2.9× | 2.9× | 3.2× | **3.2×** |
+| Parquet | 707 | 1,207 | 4,530 | 8,336 |
+| Vortex | **261** | **437** | **1,602** | **3,022** |
+| Vortex advantage | 2.7× | 2.8× | 2.8× | **2.8×** |
 
-At 6h, Parquet is slower than both Prometheus and Mimir on this query while
-Vortex is roughly twice as fast as either. For dashboard-style filtered
-workloads the format choice is worth more than the engine choice.
+Vortex is 2.8× faster than Parquet on this query at every window, and 3.1×
+faster than Prometheus at 6h. For dashboard-style filtered workloads the format
+choice is worth more than the engine choice.
 
 ## Ingestion: resource usage
 
