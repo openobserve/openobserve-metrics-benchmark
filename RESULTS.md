@@ -203,25 +203,17 @@ formats:
 A selective filter is exactly what Vortex's layout exploits and what a
 full-scan columnar format does not.
 
-### The filter is where the systems stop scaling alike
-
-Parquet's relative position improves as the filter gets heavier, and that is
-worth stating precisely, because it is a property of the *other two* systems
-rather than of Parquet. Measured at 6h against a path carrying half the series
-(`/api/service-1`, 25,740 series) and the one published here (`/api/bar`,
-51,480):
-
-| 6h, filtered (ms) | 25,740 series | 51,480 series | ratio |
-| --- | --- | --- | --- |
-| Prometheus | 4,798 | 9,237 | 1.93× |
-| Mimir | 4,416 | 7,955 | 1.80× |
-| O2 · Parquet | 8,199 | 8,336 | **1.02×** |
-| O2 · Vortex | 2,549 | 3,022 | 1.19× |
+### How selective the filter is decides the ranking
 
 **Prometheus and Mimir cost scales with the series the filter matches;
-OpenObserve's barely moves.** Double the matched series and they roughly double;
-Parquet changes by 2%. So which system looks better on a filtered query depends
-on how selective the filter is — a fact no single row of a table can express.
+OpenObserve's barely does.** Halving the matched series roughly halves
+Prometheus and Mimir but leaves Parquet within a couple of percent. So a
+lighter filter pushes Parquet down the ranking and a heavier one lifts it,
+without Parquet's own cost changing.
+
+That is why the path is named here rather than left implicit: on a filter
+matching half as many series, Parquet is the slowest of the four instead of
+third. Publish which path you filtered on, or the ranking is not reproducible.
 
 ## Round 2 · 14 GB of memory
 

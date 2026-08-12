@@ -625,7 +625,7 @@ limits:
     </tbody>
   </table>
 
-  <p>The two OpenObserve variants run neck and neck — and lead throughout. On the 3-hour window, Parquet's median of 664ms is <strong>about 11× faster than Prometheus (7,517ms) and about 13× faster than Mimir (8,630ms)</strong>. Both stay under a second on every window, including 6h, where Parquet is 9.6× faster than Prometheus and Vortex 10.8×. Over 41,760 series this is the cheapest query in the set, and it is still an order of magnitude apart.</p>
+  <p>The two OpenObserve variants run neck and neck — and lead throughout. On the 3-hour window, Parquet's median of 507ms is <strong>about 15× faster than Prometheus (7,589ms) and about 16× faster than Mimir (8,324ms)</strong>. Both stay under a second on every window, including 6h, where Parquet is 9.7× faster than Prometheus and Vortex 10.0×. Over 41,760 series this is the cheapest query in the set, and it is still an order of magnitude apart.</p>
 
   <h3>2 · Unfiltered histogram: the million-series stress test</h3>
 
@@ -718,7 +718,7 @@ selected by the query.</code></pre>
 <pre><code>histogram_quantile(
   0.9,
   sum by(le, path) (
-    rate(codelab_api_request_duration_seconds_bucket{path=~"/api/service-1"}[5m])
+    rate(codelab_api_request_duration_seconds_bucket{path=~"/api/bar"}[5m])
   )
 )</code></pre>
 
@@ -739,7 +739,7 @@ selected by the query.</code></pre>
 <pre><code>histogram_quantile(
   0.9,
   sum by(le, path) (
-    rate(codelab_api_request_duration_seconds_bucket{path="/api/service-1"}[5m])
+    rate(codelab_api_request_duration_seconds_bucket{path="/api/bar"}[5m])
   )
 )</code></pre>
 
@@ -755,7 +755,7 @@ selected by the query.</code></pre>
     </tbody>
   </table>
 
-  <p>The two filter styles behave almost identically: <strong>regex and equality matching cost essentially the same</strong>, across all four systems — the filter type isn't the variable, scan volume is. Ranking the 6-hour medians: <strong>Vortex 2,549ms &lt; Mimir 4,416ms &lt; Prometheus 4,798ms &lt; Parquet 8,199ms</strong>. Note the order: with a selective filter, Parquet falls behind <em>both</em> TSDBs while Vortex stays roughly twice as fast as either.</p>
+  <p>The two filter styles behave almost identically: <strong>regex and equality matching cost essentially the same</strong>, across all four systems — the filter type isn't the variable, scan volume is. Ranking the 6-hour medians: <strong>Vortex 3,022ms &lt; Mimir 7,955ms &lt; Parquet 8,336ms &lt; Prometheus 9,237ms</strong>. Note the order: Vortex is 3.1× faster than Prometheus, while Parquet sits between the two TSDBs — a position that moves with how selective the filter is.</p>
 
   <figure>
     <svg width="100%" viewBox="0 0 692 274" xmlns="http://www.w3.org/2000/svg" role="img">

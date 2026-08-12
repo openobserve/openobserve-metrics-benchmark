@@ -628,7 +628,7 @@ limits:
     </tbody>
   </table>
 
-  <p>两个 OpenObserve 变体不分伯仲——而且全程领先。在 3 小时窗口上，Parquet 的中位数 664ms <strong>比 Prometheus（7,517ms）快约 11 倍，比 Mimir（8,630ms）快约 13 倍</strong>。两者在每个窗口上都保持在 1 秒以内，6 小时窗口也不例外——那里 Parquet 比 Prometheus 快 9.6 倍，Vortex 快 10.8 倍。在 41,760 条时间线上，这是这组测试里最便宜的一条查询，而差距依然是一个数量级。</p>
+  <p>两个 OpenObserve 变体不分伯仲——而且全程领先。在 3 小时窗口上，Parquet 的中位数 507ms <strong>比 Prometheus（7,589ms）快约 15 倍，比 Mimir（8,324ms）快约 16 倍</strong>。两者在每个窗口上都保持在 1 秒以内，6 小时窗口也不例外——那里 Parquet 比 Prometheus 快 9.7 倍，Vortex 快 10.0 倍。在 41,760 条时间线上，这是这组测试里最便宜的一条查询，而差距依然是一个数量级。</p>
 
   <h3>2 · 无过滤 histogram：百万时间线压力测试</h3>
 
@@ -721,7 +721,7 @@ selected by the query.</code></pre>
 <pre><code>histogram_quantile(
   0.9,
   sum by(le, path) (
-    rate(codelab_api_request_duration_seconds_bucket{path=~"/api/service-1"}[5m])
+    rate(codelab_api_request_duration_seconds_bucket{path=~"/api/bar"}[5m])
   )
 )</code></pre>
 
@@ -742,7 +742,7 @@ selected by the query.</code></pre>
 <pre><code>histogram_quantile(
   0.9,
   sum by(le, path) (
-    rate(codelab_api_request_duration_seconds_bucket{path="/api/service-1"}[5m])
+    rate(codelab_api_request_duration_seconds_bucket{path="/api/bar"}[5m])
   )
 )</code></pre>
 
@@ -758,7 +758,7 @@ selected by the query.</code></pre>
     </tbody>
   </table>
 
-  <p>两种过滤方式的表现几乎完全一致：在全部四套系统上，<strong>正则匹配和等值匹配的开销基本相同</strong>——变量不是过滤类型，而是扫描量。按 6 小时的中位数排序：<strong>Vortex 2,549ms &lt; Mimir 4,416ms &lt; Prometheus 4,798ms &lt; Parquet 8,199ms</strong>。注意这个顺序：在有选择性的过滤条件下，Parquet 落到了<em>两个</em> TSDB 之后，而 Vortex 仍比它们中的任何一个快约一倍。</p>
+  <p>两种过滤方式的表现几乎完全一致：在全部四套系统上，<strong>正则匹配和等值匹配的开销基本相同</strong>——变量不是过滤类型，而是扫描量。按 6 小时的中位数排序：<strong>Vortex 3,022ms &lt; Mimir 7,955ms &lt; Parquet 8,336ms &lt; Prometheus 9,237ms</strong>。注意这个顺序：Vortex 比 Prometheus 快 3.1 倍，而 Parquet 位于两个 TSDB 之间——这个位置会随过滤条件的选择性而变化。</p>
 
   <figure>
     <svg width="100%" viewBox="0 0 692 274" xmlns="http://www.w3.org/2000/svg" role="img">
