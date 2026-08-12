@@ -126,12 +126,6 @@ extraEnv:
   # Fairness: no query result caching, matching "caches disabled" on the others.
   - name: ZO_RESULT_CACHE_ENABLED
     value: "false"
-  - name: ZO_COMPACT_INTERVAL
-    value: "10"
-  - name: ZO_COMPACT_OLD_DATA_INTERVAL
-    value: "60"
-  - name: ZO_COMPACT_OLD_DATA_MIN_FILES
-    value: "2"
   # >>> THE A/B VARIABLE <<<  parquet here, vortex in ../openobserve-vortex.
   - name: ZO_FILE_FORMAT
     value: "parquet"

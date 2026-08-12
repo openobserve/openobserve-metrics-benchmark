@@ -5,7 +5,11 @@
 # has 25 buckets + `+Inf`, so `_bucket` is exactly 26x `_count`.
 # See deploy/README.md. Re-run bench/cardinality.sh after changing replicas.
 #
-# Runs on ordinary worker nodes, not the perf nodes.
+# Tolerates the `perf` taint, so replicas MAY land on the four nodes under
+# test -- this is how the published run was configured. A toleration permits
+# those nodes, it does not prefer them: spread over the cluster's arm64 nodes,
+# only a handful land there. Check with `kubectl -n perf-fakeserver get pods -o wide`,
+# or delete the toleration block below to keep the load off them entirely.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -19,7 +23,7 @@ metadata:
   labels:
     app: fake-webserver
 spec:
-  replicas: 33
+  replicas: 24
   selector:
     matchLabels:
       app: fake-webserver

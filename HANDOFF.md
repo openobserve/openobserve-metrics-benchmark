@@ -2,6 +2,54 @@
 
 Working notes, not part of the published benchmark. All testing is finished.
 
+## Testing closed (2026-08-12)
+
+Deployment is back to the published configuration and verified end to end:
+
+| | |
+| --- | --- |
+| Dataset | `run-a`, all four, cardinality 1,085,760 |
+| OpenObserve | `openobserve/openobserve:v0.92.0`, no experimental env |
+| Memory | 28 GB on all four |
+| Load generator | 24 replicas in the deploy file, scaled to 0 in the cluster |
+| Filter | `PATH_FILTER=/api/bar` |
+| Disk | 11 / 18 / 28 / 27 GB -- matches the published table exactly |
+
+### rc3 builds migrate the metadata store, one way
+
+An rc3 build opening a dataset runs sqlite migrations 65 and 66. v0.92.0 ships
+only up to 64, sees a newer schema and refuses to start:
+
+```
+DB_SCHEMA_VERSION mismatch : expected 64, found 66
+db init failed: Migration file of version 'm20260809_000001_...' is missing
+```
+
+Restoring the parquet files alone does not fix it -- the `.sqlite` in the same
+directory carries the schema. **Back up a dataset before letting any rc build
+touch it, or it can never be read by the release again.** `run-a` was recovered
+this way from `backup/run-a-o2-*`; `run-b` and `run-c` are still on schema 66
+and are rc3-only.
+
+### Build comparisons measured (diagnostic, not in RESULTS)
+
+- `1e921fa` vs `v0.92.0` on run-a: 1.1-1.5x faster, most consistently ~1.25x
+  on filtered queries in both formats.
+- `1e921fa` vs `b3f3c1d` on run-b: 1.6-2.0x faster on filtered queries.
+  Confounded -- the two runs read different file layouts.
+- `ZO_METRICS_INLIST_FILTER_ENABLED=true` on v0.92.0: up to 2x, by moving the
+  series threshold from ~905k to ~1.36M.
+- `ZO_COMPACT_MAX_FILE_SIZE=4096`: no effect on parquet, ~10% on vortex.
+- `ZO_METRICS_LABEL_CACHE_MAX_SIZE`: no measurable effect. These queries touch
+  few distinct label combinations, so the cache is not the bottleneck here.
+
+### Backups on the instance store
+
+`/mnt/k8s-disks/0/backup/` holds `run-a-*` (pre-rc3, the restore point),
+`run-b-*`, `run-c-*` and `run-b-sorted-o2-vortex` (the 683-file sorted layout).
+All on the same ephemeral disks as the originals -- a node replacement takes
+both.
+
 ## Done (2026-08-12): RESULTS re-run on /api/bar
 
 The published filtered-histogram numbers used `/api/service-1`, one of 50
