@@ -164,10 +164,9 @@ different benchmark:
 | Mimir write limits | `ingestion_rate` 20M, `max_global_series_per_user` 150M | Writes are never throttled by defaults |
 | Query limits and timeouts | Raised to match across all four — see [deploy/README.md](deploy/README.md#query-limits) | At defaults several systems *refuse* the million-series histogram, which measures the limit rather than the engine. 600 s timeout everywhere |
 | Result caches | VictoriaMetrics `-search.disableCache`, OpenObserve `ZO_RESULT_CACHE_ENABLED=false`; Prometheus and Mimir have none configured | Warm runs must re-execute the query |
-| OpenObserve pushdown | `ZO_FEATURE_PUSHDOWN_FILTER_ENABLED=false` | ~20% *slower* in these tests when on |
-| OpenObserve compaction | off during the backfill, on after; `ZO_FILE_MERGE_THREAD_NUM=1` | Merging an hour while it is still being written leaves late files unmerged. Turning it on then queues ~290 files per hour at once, and the default 6 merge workers OOM at 24 GB; one worker peaks at ~5 GiB. See [deploy/README.md](deploy/README.md#after-the-backfill) |
+| OpenObserve compaction | off during the backfill, on after | Merging an hour while it is still being written leaves late files unmerged. See [deploy/README.md](deploy/README.md#after-the-backfill) |
 | Mimir background timing | compaction, sync and deletion delays cut to minutes; `retention_period: 15m` | Settles ~30 minutes after the backfill with one copy of the data, read from object storage like the others read their disk |
-| OpenObserve file format | `ZO_FILE_FORMAT=parquet` | Vortex queries no faster with the metrics index and takes more than twice the disk, so it was dropped |
+| OpenObserve file format | Parquet, the default | Vortex queries no faster with the metrics index and takes more than twice the disk, so it was dropped |
 
 ## Known gaps
 
@@ -201,7 +200,7 @@ deploy/
   prometheus/          Prometheus v3.6.0, remote-write receiver, scrapes nothing
   mimir/               Mimir single binary, filesystem blocks storage
   victoriametrics/     VictoriaMetrics single node (Helm)
-  openobserve-parquet/ OpenObserve standalone, ZO_FILE_FORMAT=parquet (Helm)
+  openobserve-parquet/ OpenObserve standalone, Parquet (Helm)
   fake-webserver/      The load: a v5 backfill Job writing to all four
 bench/
   config.sh            Endpoints, windows, step, runs — every knob

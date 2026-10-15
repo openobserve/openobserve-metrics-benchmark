@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>One Dataset, Four Systems — Benchmarking Prometheus, Mimir, and OpenObserve on Metrics Ingestion and Queries</title>
+<title>One Dataset, Four Systems — Benchmarking Prometheus, Mimir, VictoriaMetrics and OpenObserve on Metrics Queries</title>
 <style>
   :root {
     --bg: #fff;
@@ -401,56 +401,56 @@
 
   <div class="eyebrow">OpenObserve · Metrics Benchmark</div>
 
-  <h1>One Dataset, <span class="accent">Four Systems</span> — Benchmarking Prometheus, Mimir, and OpenObserve on Metrics Ingestion and Queries</h1>
+  <h1>One Dataset, <span class="accent">Four Systems</span> — Benchmarking Prometheus, Mimir, VictoriaMetrics and OpenObserve on Metrics Queries</h1>
 
   <div class="lede">
-    <strong>We pushed the same ~2.2 billion samples through one OTel Collector into four systems simultaneously, stopped ingestion, and ran the exact same PromQL against each over an identical frozen window.</strong><br><br>
-    Then we ran the whole thing twice, changing only the memory limit — 28 GB, then 14 GB — because those turn out to answer different questions.
+    <strong>We wrote the same 2.2 billion samples — 1.34 million series — into four systems at once, then ran the exact same PromQL against each over the same fixed time windows.</strong><br><br>
+    Every system had the same 12 CPUs and 24 GB of memory, the same local NVMe disk, and the same query limits. OpenObserve answered every one of the 16 query/window combinations fastest.
   </div>
 
-  <p>The contenders are four deployments with fully aligned configurations: <strong>Prometheus, Grafana Mimir, OpenObserve (Parquet format), and OpenObserve (Vortex format)</strong>. Each gets a dedicated EC2 m7gd.2xlarge with its data on the node's <strong>local NVMe</strong>, query caches disabled, and identical query limits and timeouts — so that neither the disk nor a protective default decides the outcome.</p>
+  <p>The contenders: <strong>Prometheus, Grafana Mimir, VictoriaMetrics and OpenObserve v1.1.0</strong>. Each runs single-node on its own dedicated EC2 <code>m7gd.4xlarge</code>, writes to that node's <strong>local NVMe</strong>, has result caches disabled and identical query limits and timeouts — so that neither the disk nor a protective default decides the outcome.</p>
 
   <!-- Hero chart: 6h unfiltered histogram, the million-series query -->
   <figure>
-    <svg width="100%" viewBox="0 0 680 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Six-hour unfiltered histogram_quantile query over 1.09 million series, latency across four systems">
-      <text x="40" y="34" font-family="sans-serif" font-size="15" font-weight="600" fill="#1a1a17">histogram_quantile over 1,085,760 series, 6-hour window (median)</text>
-      <text x="40" y="56" font-family="sans-serif" font-size="12" fill="#8a8a82">Same data · same PromQL · frozen dataset · local NVMe · 28 GB memory limit</text>
+    <svg width="100%" viewBox="0 0 680 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="histogram_quantile over 1,179,360 series, 6-hour window (median)">
+      <text x="40" y="34" font-family="sans-serif" font-size="15" font-weight="600" fill="#1a1a17">histogram_quantile over 1,179,360 series, 6-hour window (median)</text>
+      <text x="40" y="56" font-family="sans-serif" font-size="12" fill="#8a8a82">Same data · same PromQL · local NVMe · 12 CPU / 24 GB each</text>
 
       <rect x="200" y="88" width="440.0" height="44" rx="3" fill="#c14920" opacity="0.92"/>
       <text x="192" y="116" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">Prometheus</text>
-      <text x="632" y="116" text-anchor="end" font-family="sans-serif" font-size="15" font-weight="700" fill="#ffffff">4m 28s</text>
+      <text x="632" y="116" text-anchor="end" font-family="sans-serif" font-size="15" font-weight="700" fill="#ffffff">4m 17s</text>
 
-      <rect x="200" y="148" width="385.9" height="44" rx="3" fill="#ba7517" opacity="0.92"/>
+      <rect x="200" y="148" width="122.1" height="44" rx="3" fill="#ba7517" opacity="0.92"/>
       <text x="192" y="176" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">Mimir</text>
-      <text x="578" y="176" text-anchor="end" font-family="sans-serif" font-size="15" font-weight="700" fill="#ffffff">3m 55s</text>
+      <text x="314" y="176" text-anchor="end" font-family="sans-serif" font-size="15" font-weight="700" fill="#ffffff">71.3s</text>
 
-      <rect x="200" y="208" width="77.0" height="44" rx="3" fill="#185fa5" opacity="0.92"/>
-      <text x="192" y="236" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">O2 · Parquet</text>
-      <text x="288" y="236" font-family="sans-serif" font-size="15" font-weight="700" fill="#185fa5">46.9s</text>
+      <rect x="200" y="208" width="15.1" height="44" rx="3" fill="#185fa5" opacity="0.92"/>
+      <text x="192" y="236" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">VictoriaMetrics</text>
+      <text x="223" y="236" font-family="sans-serif" font-size="15" font-weight="700" fill="#185fa5">8.8s</text>
 
-      <rect x="200" y="268" width="74.8" height="44" rx="3" fill="#0f6e56"/>
-      <text x="192" y="296" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">O2 · Vortex</text>
-      <text x="283" y="296" font-family="sans-serif" font-size="15" font-weight="700" fill="#0f6e56">45.5s</text>
+      <rect x="200" y="268" width="6.3" height="44" rx="3" fill="#0f6e56"/>
+      <text x="192" y="296" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">OpenObserve</text>
+      <text x="214" y="296" font-family="sans-serif" font-size="15" font-weight="700" fill="#0f6e56">3.7s</text>
 
       <line x1="200" y1="330" x2="640" y2="330" stroke="#c8c1ad" stroke-width="1"/>
 
-      <rect x="380" y="262" width="260" height="52" rx="6" fill="#0f6e56"/>
-      <text x="510" y="285" text-anchor="middle" font-family="sans-serif" font-size="16" font-weight="700" fill="#ffffff">6× faster than Prometheus</text>
-      <text x="510" y="305" text-anchor="middle" font-family="sans-serif" font-size="10.5" fill="#d4ebe2">at stock limits all three refuse this query outright</text>
+      <rect x="360" y="202" width="280" height="56" rx="6" fill="#0f6e56"/>
+      <text x="500" y="227" text-anchor="middle" font-family="sans-serif" font-size="16" font-weight="700" fill="#ffffff">69× faster than Prometheus</text>
+      <text x="500" y="247" text-anchor="middle" font-family="sans-serif" font-size="10.5" fill="#d4ebe2">2.4× faster than VictoriaMetrics, 19× faster than Mimir</text>
     </svg>
-    <figcaption>Figure 1 · The million-series histogram over 6 hours, 28 GB memory limit. Bar lengths to real scale.</figcaption>
+    <figcaption>Figure 1 · The million-series histogram over 6 hours. Bar lengths to real scale.</figcaption>
   </figure>
 
   <h2>The setup</h2>
 
   <ul>
-    <li><strong>Hardware:</strong> one dedicated EC2 <code>m7gd.2xlarge</code> per system, 7 CPU, 474 GB local NVMe; container memory limit 28 GB in round 1 and 14 GB in round 2</li>
-    <li><strong>Versions:</strong> Prometheus <code>quay.io/prometheus/prometheus:v3.6.0</code>; Mimir <code>grafana/mimir:latest</code>; OpenObserve <code>v0.92.0</code>, two OpenObserve deployments as an A/B: one with <code>ZO_FILE_FORMAT=parquet</code>, one with <code>ZO_FILE_FORMAT=vortex</code>. All single-node</li>
-    <li><strong>Fairness settings:</strong> all query caches disabled; OpenObserve's Parquet filter pushdown disabled (<code>ZO_FEATURE_PUSHDOWN_FILTER_ENABLED=false</code> — it's on by default, but in our metrics tests it actually slowed queries by ~20%, so we turned it off; the switch only affects Parquet, Vortex's filter pushdown is always on)</li>
-    <li><strong>Ingestion:</strong> 2026-08-09 04:47–13:10 UTC (8h23m), then stopped — every query runs against a frozen dataset</li>
-    <li><strong>Query range:</strong> four windows of 30m / 1h / 3h / 6h, all ending 2026-08-09 12:00 UTC, pinned absolutely so successive runs measure the same data</li>
-    <li><strong>Step:</strong> computed per window the way Grafana does — <code>max(15s, range / 1000)</code> rounded up to a tidy interval — rather than pinned at 15s. That is 15s for 30m/1h/3h and 30s at 6h, so every window asks for ≤720 points instead of 1,440 at 6h</li>
-    <li><strong>Measurement:</strong> from a pod inside the cluster, in the same AZ as all four systems. Every query runs 3 times and the tables report the median, plus one cold first-touch request recorded separately and excluded from it</li>
+    <li><strong>Hardware:</strong> one dedicated EC2 <code>m7gd.4xlarge</code> per system (16 vCPU, 64 GiB, local NVMe); every container limited to <strong>12 CPU / 24 GB</strong>, requests equal to limits — for ingestion, compaction and queries alike</li>
+    <li><strong>Versions:</strong> Prometheus <code>v3.6.0</code>; Mimir <code>grafana/mimir:latest</code> (pulled 2026-10-15); VictoriaMetrics <code>v1.154.0</code>, single node; OpenObserve <code>v1.1.0</code>, standalone, Parquet storage with its metrics index enabled. All single-node</li>
+    <li><strong>Fairness settings:</strong> result caches off (VictoriaMetrics <code>-search.disableCache</code>, OpenObserve <code>ZO_RESULT_CACHE_ENABLED=false</code>; Prometheus and Mimir have none configured); query limits raised to the same level on all four; a 600s timeout everywhere</li>
+    <li><strong>Data:</strong> 7 hours of samples at exactly 15-second intervals, 2026-09-28 03:00–10:00 UTC, written once to all four; ingestion finished before any query ran</li>
+    <li><strong>Query range:</strong> four windows of 30m / 1h / 3h / 6h, all ending 2026-09-28 10:00 UTC</li>
+    <li><strong>Step:</strong> computed per window the way Grafana does — <code>max(15s, range / 1000)</code> rounded up to a tidy interval: 15s for 30m/1h/3h and 30s at 6h, so no window asks for more than 720 points</li>
+    <li><strong>Measurement:</strong> from a pod inside the cluster, in the same AZ as all four systems. Each cell is run 5 times (the slowest two cells once), the whole matrix twice back to back, and the tables report the median of both passes. One cold first-touch request per cell is recorded separately and excluded</li>
   </ul>
 
   <p>Key OpenObserve environment variables:</p>
@@ -460,154 +460,107 @@
     value: "40000"
   - name: ZO_METRICS_MAX_POINTS_PER_SERIES
     value: "10000000"
-  - name: ZO_FEATURE_PUSHDOWN_FILTER_ENABLED
-    value: "false"
   - name: ZO_RESULT_CACHE_ENABLED
     value: "false"
-  # A/B: one deployment on parquet, one on vortex
-  - name: ZO_FILE_FORMAT
-    value: "vortex"</code></pre>
+  - name: ZO_METRICS_INDEX_ENABLED
+    value: "true"</code></pre>
 
-  <p>Prometheus launch arguments — remote write receiver enabled so the OTel Collector can push, and the last two raised from their defaults so the million-series histogram runs instead of being refused:</p>
+  <p>Prometheus launch arguments — the remote write receiver so the load can be pushed in, and the last two raised from their defaults so the million-series histogram runs instead of being refused — plus a 2-hour out-of-order window in <code>prometheus.yml</code>, because the load's parallel senders deliver neighbouring timestamps slightly out of order:</p>
 
 <pre><code>args:
-  - --config.file=/etc/prometheus/prometheus.yml
-  - --storage.tsdb.path=/prometheus
-  - --web.enable-lifecycle
   - --web.enable-remote-write-receiver
   - --query.max-samples=1000000000   # default 50e6
-  - --query.timeout=600s             # default 2m</code></pre>
+  - --query.timeout=600s             # default 2m
 
-  <p>Key Mimir configuration. Ingestion limits are raised so the write path is never throttled by defaults; the query-side ones are raised for the same reason as Prometheus's. Mimir needs <em>both</em> timeouts — <code>http_server_write_timeout</code> also defaults to 2m and fires first, closing the connection before Mimir can write its own timeout response:</p>
+# prometheus.yml
+storage:
+  tsdb:
+    out_of_order_time_window: 2h</code></pre>
+
+  <p>Key Mimir configuration. Ingestion limits are raised so the write path is never throttled by defaults, and the query-side ones for the same reason as Prometheus's. Mimir needs <em>both</em> timeouts — <code>http_server_write_timeout</code> also defaults to 2m and fires first:</p>
 
 <pre><code>querier:
   timeout: 600s                        # default 2m
-
 server:
   http_server_write_timeout: 600s      # default 2m
-
-store_gateway:
-  sharding_ring:
-    replication_factor: 1
-
 limits:
   ingestion_rate: 20000000
   ingestion_burst_size: 20000000
   max_global_series_per_user: 150000000
   max_fetched_chunks_per_query: 20000000   # default 2e6
-  ha_cluster_label: prometheus
-  ha_replica_label: prometheus_replica</code></pre>
+  out_of_order_time_window: 2h
+  query_ingesters_within: 0</code></pre>
+
+  <p>Mimir's background timers default to hours: compaction waits up to an hour, the ingester keeps its local copy of each block for 13 hours after upload, and compacted-away blocks are kept for 12. In this run Mimir used those defaults, and we waited for it to settle before measuring. To have it settle about 30 minutes after a backfill, holding a single copy of the data and answering from object storage, shorten them:</p>
+
+<pre><code>blocks_storage:
+  tsdb:
+    head_compaction_idle_timeout: 5m       # default 1h
+    retention_period: 15m                  # default 13h
+  bucket_store:
+    sync_interval: 1m                      # default 15m
+    ignore_deletion_mark_delay: 5m         # default 1h
+    ignore_deletion_mark_while_querying_delay: 4m
+compactor:
+  first_level_compaction_wait_period: 1m   # default 25m
+  compaction_interval: 5m                  # default 1h
+  cleanup_interval: 5m                     # default 15m
+  deletion_delay: 10m                      # default 12h
+# and leave limits.query_ingesters_within at its 13h default</code></pre>
+
+  <p>Mimir checks two of these at startup: the while-querying delay must exceed three times <code>sync_interval</code> and stay below <code>ignore_deletion_mark_delay</code>.</p>
+
+  <p>VictoriaMetrics, with its per-query limits raised so the largest query is answered rather than rejected:</p>
+
+<pre><code>extraArgs:
+  search.disableCache: true
+  search.maxSamplesPerQuery: "2147000000"
+  search.maxQueryDuration: 600s
+  search.maxUniqueTimeseries: "5000000"</code></pre>
 
   <h3>How the measurement is taken</h3>
 
-  <p>Four choices here move the numbers more than any configuration above, so they are worth stating outright.</p>
+  <p><strong>Queries are issued from inside the cluster.</strong> Driving a benchmark from a laptop through <code>kubectl port-forward</code> adds a second or more to every request, and not as a constant — it grows with response size, so it swamps a fast system and barely dents a slow one. That destroys the ratios between systems, which is the only thing a comparison is for. Everything here is measured from a pod in the same availability zone as all four systems, on a node that is not under test.</p>
 
-  <p><strong>Queries are issued from inside the cluster.</strong> The obvious way to drive a benchmark from a laptop is <code>kubectl port-forward</code>, and it invalidates the result. The fastest query in this set answers in about 100ms; forwarding adds far more than that, and it does not add a constant — the same query measured 1,656ms to 2,862ms of pure overhead across repeats. That does not merely inflate the numbers, it destroys the ratios between systems, which is the only thing a comparison is for. Everything here is measured from a pod in the cluster, in the same availability zone as all four systems, on a node that is not under test.</p>
+  <p><strong>Every system's data is on node-local NVMe</strong>, so storage is not a variable between them and no query is measuring network-disk throughput.</p>
 
-  <p><strong>Every system's data is on node-local NVMe.</strong> Each system gets a dedicated <code>m7gd.2xlarge</code> and writes to that node's instance store, so storage is not a variable between them and no query is measuring EBS throughput.</p>
+  <p><strong>All data is in place before anything is measured.</strong> The load finishes, every system finishes its own background work — compaction, merges, block uploads — and only then do the queries start. All four answer over the same absolutely-pinned windows, so a run repeated later sees the same bytes.</p>
 
-  <p><strong>Ingestion is stopped before anything is measured.</strong> All four query a frozen dataset over absolutely-pinned time windows, so a run repeated an hour later sees the same bytes. Load still arriving during measurement would make each system's numbers depend on what it happened to be compacting.</p>
+  <p><strong>The step is computed, not pinned.</strong> A fixed 15s step makes the point count grow with the window — 1,440 points at 6h — which no dashboard would request. Grafana asks for roughly the panel width in pixels, so this benchmark uses its rule. It matters: Prometheus's and Mimir's cost grows with the number of output points, OpenObserve's with the data scanned.</p>
 
-  <p><strong>The step is computed, not pinned.</strong> A fixed 15s step makes the point count grow with the window — 1,440 points at 6h — which no dashboard would ever request. Grafana asks for roughly the panel width in pixels, so this benchmark uses its rule: <code>max(15s, range / 1000)</code> rounded up to a tidy interval. That is 15s at 30m/1h/3h and 30s at 6h. It matters because <strong>Prometheus and Mimir cost scales with the number of output points, while OpenObserve's scales with the data scanned</strong> — on a fixed 3-hour window, widening the step from 36 to 720 points moved Prometheus 1.68s→3.92s and Mimir 1.14s→4.11s, but OpenObserve only 3.45s→4.63s. Publish your step whichever way you go; it is the single biggest lever on absolute latency here.</p>
-
-  <p>One more: the <strong>first request against each cell is recorded separately and excluded from the medians</strong>. A cold first touch pays for file opens, index loads and page-cache misses, and answers a different question — "what does the first query after a gap cost?" — than the warm runs that follow.</p>
+  <p><strong>The first request per cell is recorded separately.</strong> A cold first touch pays for file opens, index loads and page-cache misses, and answers a different question — "what does the first query after a gap cost?" — than the warm runs that follow.</p>
 
   <h3>How the data was generated</h3>
 
-  <p>The workload comes from <a href="https://github.com/openobserve/fake-webserver"><code>openobserve/fake-webserver:v2</code></a>: 24 pods, each producing ~45k time series, so <strong>the histogram's <code>_bucket</code> metric carries roughly 1.09 million active series</strong>.</p>
-
-  <p>On the collection side, a separately deployed OTel Collector <strong>writes the same data to all systems under test simultaneously</strong> — every system receives the exact same samples, <strong>~2.2 billion across the <code>codelab_api_*</code> metrics</strong>, spanning 1,085,760 bucket series.</p>
-
-  <p>Cardinality of the two key metrics:</p>
+  <p>The load comes from <a href="https://github.com/openobserve/fake-webserver"><code>openobserve/fake-webserver:v5</code></a> in backfill mode: a single job simulating 14 web-server nodes, producing 7 hours of samples at exactly 15-second spacing from a fixed seed. It sends <strong>the identical Prometheus remote-write requests to all four systems</strong>, so every system receives byte-identical data, and the same flags reproduce the same samples.</p>
 
   <ul>
-    <li><code>codelab_api_request_duration_seconds_bucket</code>: <strong>1,085,760</strong> series (high cardinality; used by the histogram queries)</li>
-    <li><code>codelab_api_request_duration_seconds_count</code>: <strong>41,760</strong> series (used by the irate query)</li>
+    <li><strong>2,218,011,632 samples</strong> across 1,338,330 series, written in 1 h 20 min at ~464k samples/s to each system</li>
+    <li><strong>0 retries, 0 rejected samples</strong> on any system; each then held exactly the generated count</li>
   </ul>
 
-  <p>Remember that bucket cardinality. A million series is where the results start to diverge.</p>
-
-  <h2>Ingestion: resource usage</h2>
-
-  <p>Sampled every 10 minutes across the 8h23m ingestion, at the 28 GB memory limit. Disk is the settled figure, 14.8 hours after the last write:</p>
+  <p>Series per metric, verified identical on all four:</p>
 
   <table>
     <thead>
-      <tr><th>System</th><th>CPU (cores, typical)</th><th>RSS (steady)</th><th>Disk (settled)</th></tr>
+      <tr><th>Metric</th><th>Series</th><th>Used by</th></tr>
     </thead>
     <tbody>
-      <tr><td>Prometheus</td><td>1.3–1.9</td><td>3.2–4.1 GB</td><td>11 GB</td></tr>
-      <tr><td>Mimir</td><td>0.7–1.1</td><td>4.5–5.5 GB</td><td>18 GB</td></tr>
-      <tr><td>OpenObserve (Parquet)</td><td>1.6–2.2</td><td><strong>1.5–2.0 GB</strong></td><td>28 GB</td></tr>
-      <tr><td>OpenObserve (Vortex)</td><td>1.6–2.0</td><td><strong>1.5–2.1 GB</strong></td><td>27 GB</td></tr>
+      <tr><td><code>codelab_api_request_duration_seconds_bucket</code></td><td><strong>1,179,360</strong></td><td>the histogram queries</td></tr>
+      <tr><td><code>codelab_api_request_duration_seconds_count</code></td><td>45,360</td><td>the irate query</td></tr>
+      <tr><td><code>codelab_api_request_duration_seconds_sum</code></td><td>45,360</td><td></td></tr>
+      <tr><td><code>codelab_api_requests_total</code></td><td>45,360</td><td></td></tr>
+      <tr><td><code>codelab_api_request_errors_total</code></td><td>22,680</td><td></td></tr>
+      <tr><td><code>codelab_api_http_requests_in_progress</code></td><td>210</td><td></td></tr>
+      <tr><td><strong>Total</strong></td><td><strong>1,338,330</strong></td><td></td></tr>
     </tbody>
   </table>
 
-  <figure>
-    <svg width="100%" viewBox="0 0 692 300" xmlns="http://www.w3.org/2000/svg" role="img">
-      <text x="0" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">CPU during ingestion (cores, typical — lower is better)</text>
-      <line x1="0" y1="27" x2="680" y2="27" stroke="#e0d9c8" stroke-width="1"/>
-      <text x="100" y="45" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
-      <rect x="108" y="36" width="454.7" height="11" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="571" y="45" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1.6</text>
-      <text x="100" y="61" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
-      <rect x="108" y="52" width="255.8" height="11" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="372" y="61" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">0.9</text>
-      <text x="100" y="77" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Parquet</text>
-      <rect x="108" y="68" width="540.0" height="11" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="656" y="77" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1.9</text>
-      <text x="100" y="93" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
-      <rect x="108" y="84" width="511.6" height="11" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="628" y="93" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1.8</text>
-      <text x="0" y="119" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Memory during ingestion (GB RSS, peak of steady range — lower is better)</text>
-      <line x1="0" y1="127" x2="680" y2="127" stroke="#e0d9c8" stroke-width="1"/>
-      <text x="100" y="145" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
-      <rect x="108" y="136" width="402.5" height="11" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="519" y="145" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">4.1</text>
-      <text x="100" y="161" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
-      <rect x="108" y="152" width="540.0" height="11" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="656" y="161" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">5.5</text>
-      <text x="100" y="177" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Parquet</text>
-      <rect x="108" y="168" width="196.4" height="11" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="312" y="177" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2</text>
-      <text x="100" y="193" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
-      <rect x="108" y="184" width="206.2" height="11" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="322" y="193" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2.1</text>
-      <text x="0" y="219" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Disk, settled 14.8h after the last write (GB — lower is better)</text>
-      <line x1="0" y1="227" x2="680" y2="227" stroke="#e0d9c8" stroke-width="1"/>
-      <text x="100" y="245" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
-      <rect x="108" y="236" width="212.1" height="11" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="328" y="245" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">11</text>
-      <text x="100" y="261" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
-      <rect x="108" y="252" width="347.1" height="11" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="463" y="261" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">18</text>
-      <text x="100" y="277" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Parquet</text>
-      <rect x="108" y="268" width="540.0" height="11" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="656" y="277" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">28</text>
-      <text x="100" y="293" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
-      <rect x="108" y="284" width="520.7" height="11" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="637" y="293" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">27</text>
-    </svg>
-    <figcaption>Figure 2 · Resource usage while ingesting ~1.09M bucket series, 28 GB memory limit.</figcaption>
-  </figure>
-
-  <p>Three observations:</p>
-
-  <p><strong>Memory is OpenObserve's clear win.</strong> Sampled every ten minutes across 8h23m of ingestion as <strong>RSS</strong> — the memory the process actually holds, the number <code>top</code> reports in <code>RES</code>, not page cache the kernel is free to reclaim — Prometheus ran 3.2–4.1GB and Mimir 4.5–5.5GB, both moving in a sawtooth as head blocks fill and compact. Both OpenObserve variants stay <strong>flat at 1.5–2.1GB</strong> — roughly half of Prometheus and a third of Mimir. Once ingestion stops everything collapses: Prometheus to 2.4GB, Mimir to 2.5GB, and both OpenObserve deployments to <strong>under 600MB</strong>; the ingestion-time figures are buffers and WAL, not resident working set.</p>
-
-  <p><strong>OpenObserve pays for it in CPU.</strong> ~1.6–2.2 cores versus Prometheus's ~1.3–1.9 and Mimir's ~0.7–1.1. The extra cycles go into columnar encoding and compression. At identical ingest throughput, that is the price paid for query performance and low memory.</p>
-
-  <p><strong>Disk usage is largest for OpenObserve, and it deserves context.</strong> 28GB versus Prometheus's 11GB and Mimir's 18GB, over 8h23m of ingestion. A general-purpose columnar format keeps full detail rather than applying TSDB-style XOR/delta compression tuned specifically for time series; in exchange, the same data simultaneously serves SQL, PromQL, and arbitrary dimensional analysis, and maps naturally onto object storage, where it typically lives in production at a very different unit cost. Parquet and Vortex tie, at 28 and 27GB. All four figures were taken <strong>14.8 hours after the last write</strong>, once every system's compaction and cleanup had finished.</p>
-
-  <p><strong>Disk is the one number you cannot measure right after stopping ingestion.</strong> Watched live across this run, Mimir's volume went <em>up</em> after the writes stopped — 21.6GB at 13:10, 29.5GB by 14:23 — because the compactor writes the merged block first and keeps the sources for half a day. It fell back to 18GB only once <code>deletion_delay</code> expired. Read at stop+2h, Mimir looks the same size as OpenObserve; settled, OpenObserve uses 1.6× more. Only Mimir moves — Prometheus and OpenObserve read the same at both times. Two stable readings 30 seconds apart prove nothing.</p>
-
-  <p>The wait is not symmetric. OpenObserve deletes merged-away files after 2h (<code>ZO_COMPACT_DELETE_FILES_DELAY_HOURS</code>) and settles at ~2h; Prometheus deletes source blocks immediately after compaction and settles at ~2–3h; <strong>Mimir needs ~14h</strong>, and neither of its timers can usefully be shortened. Its PVC holds two copies: the filesystem bucket, whose superseded source blocks the compactor keeps for <code>deletion_delay: 12h</code>, and the ingester's local TSDB, kept for <code>blocks_storage.tsdb.retention_period: 13h</code> after upload. Lowering the first only moves an intermediate drop earlier — the volume still waits on the 13-hour timer — and the second must not be lowered at all: it is aligned with <code>query_store_after: 12h</code>, and dropping the ingester's copy early makes queries silently return incomplete results. Wait ~14 hours, or say your disk figures are provisional.</p>
-
-  <p><strong>Measuring early biases the comparison towards OpenObserve</strong>, by inflating the systems it is compared against. Wait ~14 hours after the last write, or label your disk figures provisional.</p>
+  <p>Remember that bucket cardinality. A million series is where the results start to diverge.</p>
 
   <h2>Queries: four PromQL expressions, four time windows</h2>
 
-  <p>The query tests cover the four most common dashboard workloads — irate, unfiltered histogram, regex-filtered histogram, equality-filtered histogram — each run over 30-minute, 1-hour, 3-hour and 6-hour windows. <strong>Tables show the median of three runs, in ms.</strong></p>
+  <p>The query tests cover the four most common dashboard workloads — irate, unfiltered histogram, regex-filtered histogram, equality-filtered histogram — each over 30-minute, 1-hour, 3-hour and 6-hour windows. <strong>Tables show the median, in ms.</strong> No query failed and no system restarted.</p>
 
   <h3>1 · irate</h3>
 
@@ -615,17 +568,17 @@ limits:
 
   <table>
     <thead>
-      <tr><th>Window</th><th>Step</th><th>Prometheus</th><th>Mimir</th><th>O2 · Parquet</th><th>O2 · Vortex</th></tr>
+      <tr><th>Window</th><th>Step</th><th>Prometheus</th><th>Mimir</th><th>VictoriaMetrics</th><th>OpenObserve</th></tr>
     </thead>
     <tbody>
-      <tr><td>30m</td><td>15s</td><td>1,457</td><td>1,215</td><td><strong>94</strong></td><td>93</td></tr>
-      <tr><td>1h</td><td>15s</td><td>2,390</td><td>2,197</td><td>168</td><td><strong>160</strong></td></tr>
-      <tr><td>3h</td><td>15s</td><td>7,589</td><td>8,324</td><td>507</td><td><strong>512</strong></td></tr>
-      <tr><td>6h</td><td>30s</td><td>10,311</td><td>8,112</td><td>1,067</td><td><strong>1,026</strong></td></tr>
+      <tr><td>30m</td><td>15s</td><td>1,335</td><td>572</td><td>164</td><td><strong>26</strong></td></tr>
+      <tr><td>1h</td><td>15s</td><td>2,198</td><td>778</td><td>210</td><td><strong>40</strong></td></tr>
+      <tr><td>3h</td><td>15s</td><td>8,112</td><td>1,557</td><td>281</td><td><strong>84</strong></td></tr>
+      <tr><td>6h</td><td>30s</td><td>10,402</td><td>2,552</td><td>314</td><td><strong>112</strong></td></tr>
     </tbody>
   </table>
 
-  <p>The two OpenObserve variants run neck and neck — and lead throughout. On the 3-hour window, Parquet's median of 507ms is <strong>about 15× faster than Prometheus (7,589ms) and about 16× faster than Mimir (8,324ms)</strong>. Both stay under a second on every window, including 6h, where Parquet is 9.7× faster than Prometheus and Vortex 10.0×. Over 41,760 series this is the cheapest query in the set, and it is still an order of magnitude apart.</p>
+  <p>Over 45,360 series this is the cheapest query in the set, and the spread is still two orders of magnitude. On the 6-hour window OpenObserve answers in <strong>112ms — 2.8× faster than VictoriaMetrics (314ms), 23× faster than Mimir and 93× faster than Prometheus</strong>. It stays near or under a tenth of a second on every window.</p>
 
   <h3>2 · Unfiltered histogram: the million-series stress test</h3>
 
@@ -636,82 +589,79 @@ limits:
   )
 )</code></pre>
 
-  <p>This query has no label filter at all — it must run rate + aggregation over all <strong>1,085,760 series</strong>. It's the most brutal query in the test.</p>
+  <p>This query has no label filter at all — it must run rate + aggregation over all <strong>1,179,360 series</strong>. It's the most brutal query in the test.</p>
 
   <table>
     <thead>
-      <tr><th>Window</th><th>Step</th><th>Prometheus</th><th>Mimir</th><th>O2 · Parquet</th><th>O2 · Vortex</th></tr>
+      <tr><th>Window</th><th>Step</th><th>Prometheus</th><th>Mimir</th><th>VictoriaMetrics</th><th>OpenObserve</th></tr>
     </thead>
     <tbody>
-      <tr><td>30m</td><td>15s</td><td>38,348</td><td>32,491</td><td>4,387</td><td><strong>4,388</strong></td></tr>
-      <tr><td>1h</td><td>15s</td><td>64,960</td><td>62,345</td><td>8,022</td><td><strong>7,483</strong></td></tr>
-      <tr><td>3h</td><td>15s</td><td>190,735</td><td>235,490</td><td>26,581</td><td><strong>28,396</strong></td></tr>
-      <tr><td>6h</td><td>30s</td><td>267,799</td><td>234,899</td><td>46,875</td><td><strong>45,503</strong></td></tr>
+      <tr><td>30m</td><td>15s</td><td>33,514</td><td>14,850</td><td>4,152</td><td><strong>498</strong></td></tr>
+      <tr><td>1h</td><td>15s</td><td>61,054</td><td>19,790</td><td>6,127</td><td><strong>986</strong></td></tr>
+      <tr><td>3h</td><td>15s</td><td>196,290</td><td>43,092</td><td>7,898</td><td><strong>2,698</strong></td></tr>
+      <tr><td>6h</td><td>30s</td><td>256,860</td><td>71,273</td><td>8,804</td><td><strong>3,701</strong></td></tr>
     </tbody>
   </table>
 
-  <p><strong>All four complete every window — but only because the limits were raised, on all three systems.</strong> At stock settings this query does not run at all. Prometheus refuses it outright:</p>
+  <p><strong>All four complete every window — but only because the limits were raised, on all of them.</strong> At stock settings this query does not run at all. Prometheus refuses it outright:</p>
 
 <pre><code>execution: query processing would load too many samples
 into memory in query execution</code></pre>
 
-  <p>Mimir survives 30m and 1h, then refuses the wider windows:</p>
+  <p>Mimir refuses the wider windows:</p>
 
 <pre><code>execution: the query exceeded the maximum number of chunks
-(limit: 2000000 chunks) (err-mimir-max-chunks-per-query).
-Consider reducing the time range and/or number of series
-selected by the query.</code></pre>
+(limit: 2000000 chunks) (err-mimir-max-chunks-per-query).</code></pre>
 
-  <p>OpenObserve's stock metrics limits reject it too.</p>
+  <p>VictoriaMetrics' stock <code>search.maxSamplesPerQuery</code> and <code>search.maxQueryDuration</code> stop the longer windows too, with an HTTP 422. Every one of these is a protective default doing its job; this benchmark raises them all to the same allowance, with the same 600s clock.</p>
 
   <figure>
     <svg width="100%" viewBox="0 0 692 142" xmlns="http://www.w3.org/2000/svg" role="img">
-      <defs><pattern id="errstripe2" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)"><rect width="121.1" height="8" fill="#f5dccd"/><rect width="121.1" height="8" fill="#c14920" opacity="0.6"/></pattern></defs>
       <text x="0" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Unfiltered histogram · 3h (median)</text>
       <line x1="0" y1="27" x2="328" y2="27" stroke="#e0d9c8" stroke-width="1"/>
       <text x="100" y="48" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
-      <rect x="108" y="36" width="121.1" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="36" width="121.1" height="16" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="284" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">190.7s</text>
+      <rect x="108" y="36" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="108" y="36" width="170.0" height="16" rx="2" fill="#c14920" opacity="0.92"/>
+      <text x="284" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">196.3s</text>
       <text x="100" y="72" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
-      <rect x="108" y="60" width="149.5" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="60" width="149.5" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="284" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">235.5s</text>
-      <text x="100" y="96" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Parquet</text>
-      <rect x="108" y="84" width="16.9" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="84" width="16.9" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="284" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">26.6s</text>
-      <text x="100" y="120" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
-      <rect x="108" y="108" width="18.0" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="108" width="18.0" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="284" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">28.4s</text>
+      <rect x="108" y="60" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="108" y="60" width="37.3" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
+      <text x="284" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">43.1s</text>
+      <text x="100" y="96" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">VictoriaMetrics</text>
+      <rect x="108" y="84" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="108" y="84" width="6.8" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="284" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">7.9s</text>
+      <text x="100" y="120" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">OpenObserve</text>
+      <rect x="108" y="108" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="108" y="108" width="2.3" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="284" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2.7s</text>
       <text x="352" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Unfiltered histogram · 6h (median)</text>
       <line x1="352" y1="27" x2="680" y2="27" stroke="#e0d9c8" stroke-width="1"/>
       <text x="452" y="48" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
-      <rect x="460" y="36" width="170.0" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="460" y="36" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="460" y="36" width="170.0" height="16" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="636" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">267.8s</text>
+      <text x="636" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">256.9s</text>
       <text x="452" y="72" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
-      <rect x="460" y="60" width="149.1" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="60" width="149.1" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="636" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">234.9s</text>
-      <text x="452" y="96" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Parquet</text>
-      <rect x="460" y="84" width="29.8" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="84" width="29.8" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="636" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">46.9s</text>
-      <text x="452" y="120" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
-      <rect x="460" y="108" width="28.9" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="108" width="28.9" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="636" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">45.5s</text>
+      <rect x="460" y="60" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="460" y="60" width="47.2" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
+      <text x="636" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">71.3s</text>
+      <text x="452" y="96" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">VictoriaMetrics</text>
+      <rect x="460" y="84" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="460" y="84" width="5.8" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="636" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">8.8s</text>
+      <text x="452" y="120" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">OpenObserve</text>
+      <rect x="460" y="108" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
+      <rect x="460" y="108" width="2.4" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="636" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">3.7s</text>
     </svg>
-    <figcaption>Figure 3 · Million-series unfiltered histogram, 28 GB memory limit. At 14 GB Prometheus is OOMKilled on both windows.</figcaption>
+    <figcaption>Figure 2 · The million-series unfiltered histogram. Bar lengths to real scale within each panel.</figcaption>
   </figure>
 
   <div class="pull">
-    Against a million-series unfiltered histogram, the defaults decide the outcome before the engines do: Prometheus and Mimir both <strong>refuse</strong> the query at stock limits. Given the same allowances and the same 600s clock, all four finish every window — and the spread is an order of magnitude.
+    Over 1.18 million series and six hours, OpenObserve returns in <strong>3.7 seconds</strong>. VictoriaMetrics takes 8.8 seconds, Mimir 71 seconds, and Prometheus more than four minutes.
   </div>
 
-  <p>Every one of these is a protective default doing its job, and this benchmark raises all of them — <code>--query.max-samples=1e9</code>, <code>max_fetched_chunks_per_query=20e6</code>, <code>ZO_METRICS_MAX_SERIES_RESPONSE=40000</code>, <code>ZO_METRICS_MAX_POINTS_PER_SERIES=1e7</code> — together with a uniform 600s timeout. At 6h OpenObserve then finishes in 47 seconds against Prometheus's 4.5 minutes and Mimir's 4.3 minutes.</p>
+  <p>The gap is widest where the most data is scanned: at 30 minutes OpenObserve is <strong>8.3× faster than VictoriaMetrics</strong> (498ms against 4,152ms), and it holds a 2.4× lead at 6 hours. The cold first request tells the same story: OpenObserve's first 30-minute query took 509ms, VictoriaMetrics' 13.7 seconds.</p>
 
   <h3>3 · Filtered histogram (regex match)</h3>
 
@@ -724,13 +674,13 @@ selected by the query.</code></pre>
 
   <table>
     <thead>
-      <tr><th>Window</th><th>Step</th><th>Prometheus</th><th>Mimir</th><th>O2 · Parquet</th><th>O2 · Vortex</th></tr>
+      <tr><th>Window</th><th>Step</th><th>Prometheus</th><th>Mimir</th><th>VictoriaMetrics</th><th>OpenObserve</th></tr>
     </thead>
     <tbody>
-      <tr><td>30m</td><td>15s</td><td>1245</td><td>1129</td><td>707</td><td><strong>261</strong></td></tr>
-      <tr><td>1h</td><td>15s</td><td>2,193</td><td>2,144</td><td>1,207</td><td><strong>437</strong></td></tr>
-      <tr><td>3h</td><td>15s</td><td>6,887</td><td>8,070</td><td>4,530</td><td><strong>1,602</strong></td></tr>
-      <tr><td>6h</td><td>30s</td><td>9,237</td><td>7,955</td><td>8,336</td><td><strong>3,022</strong></td></tr>
+      <tr><td>30m</td><td>15s</td><td>614</td><td>380</td><td>92</td><td><strong>24</strong></td></tr>
+      <tr><td>1h</td><td>15s</td><td>1,115</td><td>476</td><td>121</td><td><strong>38</strong></td></tr>
+      <tr><td>3h</td><td>15s</td><td>3,725</td><td>894</td><td>150</td><td><strong>86</strong></td></tr>
+      <tr><td>6h</td><td>30s</td><td>4,701</td><td>1,356</td><td>169</td><td><strong>132</strong></td></tr>
     </tbody>
   </table>
 
@@ -745,310 +695,170 @@ selected by the query.</code></pre>
 
   <table>
     <thead>
-      <tr><th>Window</th><th>Step</th><th>Prometheus</th><th>Mimir</th><th>O2 · Parquet</th><th>O2 · Vortex</th></tr>
+      <tr><th>Window</th><th>Step</th><th>Prometheus</th><th>Mimir</th><th>VictoriaMetrics</th><th>OpenObserve</th></tr>
     </thead>
     <tbody>
-      <tr><td>30m</td><td>15s</td><td>1288</td><td>1126</td><td>712</td><td><strong>316</strong></td></tr>
-      <tr><td>1h</td><td>15s</td><td>2,260</td><td>2,172</td><td>1,178</td><td><strong>445</strong></td></tr>
-      <tr><td>3h</td><td>15s</td><td>6,958</td><td>8,090</td><td>4,530</td><td><strong>1,643</strong></td></tr>
-      <tr><td>6h</td><td>30s</td><td>9,226</td><td>7,935</td><td>8,331</td><td><strong>2,903</strong></td></tr>
+      <tr><td>30m</td><td>15s</td><td>626</td><td>390</td><td>92</td><td><strong>18</strong></td></tr>
+      <tr><td>1h</td><td>15s</td><td>1,137</td><td>491</td><td>120</td><td><strong>33</strong></td></tr>
+      <tr><td>3h</td><td>15s</td><td>3,717</td><td>907</td><td>154</td><td><strong>78</strong></td></tr>
+      <tr><td>6h</td><td>30s</td><td>4,694</td><td>1,350</td><td>168</td><td><strong>116</strong></td></tr>
     </tbody>
   </table>
 
-  <p>The two filter styles behave almost identically: <strong>regex and equality matching cost essentially the same</strong>, across all four systems — the filter type isn't the variable, scan volume is. Ranking the 6-hour medians: <strong>Vortex 3,022ms &lt; Mimir 7,955ms &lt; Parquet 8,336ms &lt; Prometheus 9,237ms</strong>. Note the order: Vortex is 3.1× faster than Prometheus, while Parquet sits between the two TSDBs — a position that moves with how selective the filter is.</p>
+  <p>The two filter styles behave almost identically: <strong>regex and equality matching cost essentially the same</strong> on every system — the filter type isn't the variable, scan volume is.</p>
+
+  <p>This is where the race is closest. On the 6-hour window OpenObserve answers in 116–132ms against VictoriaMetrics' 168–169ms — <strong>1.3–1.5× faster</strong> — while Mimir needs 1.35 seconds and Prometheus 4.7 seconds. On shorter windows the lead widens: at 30 minutes OpenObserve is 4–5× faster than VictoriaMetrics.</p>
 
   <figure>
     <svg width="100%" viewBox="0 0 692 274" xmlns="http://www.w3.org/2000/svg" role="img">
-      <defs><pattern id="errstripe3" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)"><rect width="8" height="8" fill="#f5dccd"/><rect width="4" height="8" fill="#c14920" opacity="0.6"/></pattern></defs>
-      <text x="0" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">irate · 6h (median)</text>
+      <text x="0" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">irate · 6h</text>
       <line x1="0" y1="27" x2="328" y2="27" stroke="#e0d9c8" stroke-width="1"/>
       <text x="100" y="48" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="108" y="36" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="108" y="36" width="170.0" height="16" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="284" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">10.3s</text>
+      <text x="284" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">10.4s</text>
       <text x="100" y="72" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
       <rect x="108" y="60" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="60" width="133.7" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="284" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">8.1s</text>
-      <text x="100" y="96" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Parquet</text>
+      <rect x="108" y="60" width="41.7" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
+      <text x="284" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2.6s</text>
+      <text x="100" y="96" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">VictoriaMetrics</text>
       <rect x="108" y="84" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="84" width="18.2" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="284" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1.1s</text>
-      <text x="100" y="120" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
+      <rect x="108" y="84" width="5.1" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="284" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">314 ms</text>
+      <text x="100" y="120" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">OpenObserve</text>
       <rect x="108" y="108" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="108" width="16.5" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="284" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1.0s</text>
-      <text x="352" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Filtered histogram, regex · 6h</text>
+      <rect x="108" y="108" width="1.8" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="284" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">112 ms</text>
+      <text x="352" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Unfiltered histogram · 6h</text>
       <line x1="352" y1="27" x2="680" y2="27" stroke="#e0d9c8" stroke-width="1"/>
       <text x="452" y="48" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="460" y="36" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="460" y="36" width="170.0" height="16" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="636" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">9237</text>
+      <text x="636" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">256.9s</text>
       <text x="452" y="72" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
       <rect x="460" y="60" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="60" width="146.4" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="636" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">7955</text>
-      <text x="452" y="96" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Parquet</text>
+      <rect x="460" y="60" width="47.2" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
+      <text x="636" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">71.3s</text>
+      <text x="452" y="96" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">VictoriaMetrics</text>
       <rect x="460" y="84" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="84" width="153.4" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="636" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">8336</text>
-      <text x="452" y="120" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
+      <rect x="460" y="84" width="5.8" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="636" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">8.8s</text>
+      <text x="452" y="120" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">OpenObserve</text>
       <rect x="460" y="108" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="108" width="55.6" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="636" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">3022</text>
-      <text x="0" y="151" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Filtered histogram, equality · 6h</text>
+      <rect x="460" y="108" width="2.4" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="636" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">3.7s</text>
+      <text x="0" y="151" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Filtered histogram, regex · 6h</text>
       <line x1="0" y1="159" x2="328" y2="159" stroke="#e0d9c8" stroke-width="1"/>
       <text x="100" y="180" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="108" y="168" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="108" y="168" width="170.0" height="16" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="284" y="180" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">9226</text>
+      <text x="284" y="180" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">4.7s</text>
       <text x="100" y="204" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
       <rect x="108" y="192" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="192" width="146.2" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="284" y="204" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">7935</text>
-      <text x="100" y="228" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Parquet</text>
+      <rect x="108" y="192" width="49.0" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
+      <text x="284" y="204" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1.4s</text>
+      <text x="100" y="228" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">VictoriaMetrics</text>
       <rect x="108" y="216" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="216" width="153.5" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="284" y="228" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">8331</text>
-      <text x="100" y="252" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
+      <rect x="108" y="216" width="6.1" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="284" y="228" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">169 ms</text>
+      <text x="100" y="252" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">OpenObserve</text>
       <rect x="108" y="240" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="240" width="53.5" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="284" y="252" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2903</text>
-      <text x="352" y="151" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Unfiltered histogram · 6h</text>
+      <rect x="108" y="240" width="4.8" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="284" y="252" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">132 ms</text>
+      <text x="352" y="151" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Filtered histogram, equality · 6h</text>
       <line x1="352" y1="159" x2="680" y2="159" stroke="#e0d9c8" stroke-width="1"/>
       <text x="452" y="180" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="460" y="168" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="460" y="168" width="170.0" height="16" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="636" y="180" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">267.8s</text>
+      <text x="636" y="180" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">4.7s</text>
       <text x="452" y="204" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
       <rect x="460" y="192" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="192" width="149.1" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="636" y="204" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">234.9s</text>
-      <text x="452" y="228" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Parquet</text>
+      <rect x="460" y="192" width="48.9" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
+      <text x="636" y="204" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1.4s</text>
+      <text x="452" y="228" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">VictoriaMetrics</text>
       <rect x="460" y="216" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="216" width="29.8" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="636" y="228" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">46.9s</text>
-      <text x="452" y="252" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">O2 · Vortex</text>
+      <rect x="460" y="216" width="6.1" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="636" y="228" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">168 ms</text>
+      <text x="452" y="252" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">OpenObserve</text>
       <rect x="460" y="240" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="240" width="28.9" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="636" y="252" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">45.5s</text>
+      <rect x="460" y="240" width="4.2" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="636" y="252" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">116 ms</text>
     </svg>
-    <figcaption>Figure 4 · All four query types over the 6-hour window, 28 GB memory limit (unit: ms).</figcaption>
+    <figcaption>Figure 3 · All four query types over the 6-hour window.</figcaption>
   </figure>
 
-  <h2>Parquet vs Vortex: same engine, two file formats</h2>
+  <p>Across all 16 query/window combinations, the geometric mean latency is <strong>123ms for OpenObserve</strong>, 400ms for VictoriaMetrics, 2,028ms for Mimir and 6,113ms for Prometheus — OpenObserve at <strong>0.31× VictoriaMetrics' latency, 6% of Mimir's and 2% of Prometheus'</strong>.</p>
 
-  <p>The only difference between the two OpenObserve deployments is <code>ZO_FILE_FORMAT</code>. The results split cleanly by query type:</p>
+  <h2>Storage</h2>
 
-  <p><strong>irate and unfiltered histogram: a tie.</strong> When queries must scan all the data, the two formats trade places within 5–10% — no decisive winner. Disk usage ties as well (28 and 27GB).</p>
-
-  <p><strong>Filtered histogram: Vortex is consistently ~3× faster.</strong></p>
-
-  <figure>
-    <svg width="100%" viewBox="0 0 692 238" xmlns="http://www.w3.org/2000/svg" role="img">
-      <defs><pattern id="errstripe4" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)"><rect width="8" height="8" fill="#f5dccd"/><rect width="4" height="8" fill="#c14920" opacity="0.6"/></pattern></defs>
-      <text x="0" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Regex filter (median, ms)</text>
-      <line x1="0" y1="27" x2="328" y2="27" stroke="#e0d9c8" stroke-width="1"/>
-      <text x="100" y="48" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">30m · Parquet</text>
-      <rect x="108" y="36" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="36" width="14.4" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="284" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">707</text>
-      <text x="100" y="72" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">30m · Vortex</text>
-      <rect x="108" y="60" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="60" width="5.3" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="284" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">261</text>
-      <text x="100" y="96" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">1h · Parquet</text>
-      <rect x="108" y="84" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="84" width="24.6" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="284" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1207</text>
-      <text x="100" y="120" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">1h · Vortex</text>
-      <rect x="108" y="108" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="108" width="8.9" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="284" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">437</text>
-      <text x="100" y="144" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">3h · Parquet</text>
-      <rect x="108" y="132" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="132" width="92.4" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="284" y="144" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">4530</text>
-      <text x="100" y="168" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">3h · Vortex</text>
-      <rect x="108" y="156" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="156" width="32.7" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="284" y="168" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1602</text>
-      <text x="100" y="192" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">6h · Parquet</text>
-      <rect x="108" y="180" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="180" width="170.0" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="284" y="192" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">8336</text>
-      <text x="100" y="216" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">6h · Vortex</text>
-      <rect x="108" y="204" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="204" width="61.6" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="284" y="216" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">3022</text>
-      <text x="352" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Equality filter (median, ms)</text>
-      <line x1="352" y1="27" x2="680" y2="27" stroke="#e0d9c8" stroke-width="1"/>
-      <text x="452" y="48" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">30m · Parquet</text>
-      <rect x="460" y="36" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="36" width="14.5" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="636" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">712</text>
-      <text x="452" y="72" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">30m · Vortex</text>
-      <rect x="460" y="60" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="60" width="6.4" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="636" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">316</text>
-      <text x="452" y="96" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">1h · Parquet</text>
-      <rect x="460" y="84" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="84" width="24.0" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="636" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1178</text>
-      <text x="452" y="120" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">1h · Vortex</text>
-      <rect x="460" y="108" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="108" width="9.1" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="636" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">445</text>
-      <text x="452" y="144" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">3h · Parquet</text>
-      <rect x="460" y="132" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="132" width="92.4" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="636" y="144" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">4530</text>
-      <text x="452" y="168" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">3h · Vortex</text>
-      <rect x="460" y="156" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="156" width="33.5" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="636" y="168" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1643</text>
-      <text x="452" y="192" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">6h · Parquet</text>
-      <rect x="460" y="180" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="180" width="170.0" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="636" y="192" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">8331</text>
-      <text x="452" y="216" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">6h · Vortex</text>
-      <rect x="460" y="204" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="204" width="59.2" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="636" y="216" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2903</text>
-    </svg>
-    <figcaption>Figure 5 · Filtered histogram, Parquet vs Vortex across all four windows, 28 GB memory limit.</figcaption>
-  </figure>
-
-  <p>The pattern is remarkably stable and widens with the window: 2.9× at 30m, 2.9× at 1h, 3.2× at 3h and 3.2× at 6h. At the 6-hour window Parquet is slower than both Prometheus and Mimir on this query while Vortex is roughly twice as fast as either — <strong>for dashboard-style filtered workloads the format choice is worth more than the engine choice</strong>.</p>
-
-  <p>Put differently: <strong>the "filter by service/endpoint" queries that dominate real dashboards are exactly the shape where Vortex gains the most.</strong></p>
-
-  <h2>Round 2: the same benchmark at 14 GB of memory</h2>
-
-  <p>28 GB is a comfortable sizing for a million active series. 14 GB is a plausible one. Running the identical benchmark at both — same frozen dataset, same queries, same absolute time windows, only the container limit changed — turns "how fast is it" into a second question: <strong>what still runs at all?</strong></p>
-
-  <p><strong>Halving the memory changes almost nothing — except that Prometheus stops being able to answer.</strong> Every cell landed within 8% of its 28 GB value, with two exceptions: the million-series unfiltered histogram at 3h and at 6h, where <strong>Prometheus was OOMKilled</strong> both times, mid-query, after 158s and 192s respectively (<code>restartCount=2</code>, <code>exitCode=137</code>).</p>
+  <p>Disk used once each system had settled, from each system's own accounting:</p>
 
   <table>
     <thead>
-      <tr><th>Query</th><th>Window</th><th>Prometheus</th><th>Mimir</th><th>O2 · Parquet</th><th>O2 · Vortex</th></tr>
+      <tr><th>System</th><th>On disk</th><th>Of which</th></tr>
     </thead>
     <tbody>
-      <tr><td>irate</td><td>6h</td><td>10,244</td><td>8,084</td><td>1,106</td><td><strong>1,042</strong></td></tr>
-      <tr><td>Unfiltered histogram</td><td>3h</td><td class="err">OOMKilled</td><td>236,270</td><td>27,305</td><td><strong>26,200</strong></td></tr>
-      <tr><td>Unfiltered histogram</td><td>6h</td><td class="err">OOMKilled</td><td>234,957</td><td>44,354</td><td><strong>42,420</strong></td></tr>
-      <tr><td>Filtered, regex</td><td>6h</td><td>9,213</td><td>7,945</td><td>8,003</td><td><strong>2,794</strong></td></tr>
-      <tr><td>Filtered, equality</td><td>6h</td><td>9,183</td><td>7,954</td><td>8,016</td><td><strong>2,827</strong></td></tr>
+      <tr><td>VictoriaMetrics</td><td><strong>1.06 GB</strong></td><td></td></tr>
+      <tr><td>OpenObserve</td><td>2.23 GB</td><td>data 1.55 GB + metrics index 0.67 GB</td></tr>
+      <tr><td>Prometheus</td><td>5.93 GB</td><td>blocks 1.74 GB; the last ~3 hours in head chunks 1.01 GB + WAL 3.19 GB</td></tr>
+      <tr><td>Mimir</td><td>11.0 GB</td><td>object storage 5.8 GB + ingester copies 5.2 GB</td></tr>
     </tbody>
   </table>
 
   <figure>
-      <svg width="100%" viewBox="0 0 692 372" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Unfiltered histogram at 28 GB versus 14 GB memory limit">
-      <defs><pattern id="oom" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)"><rect width="284.8" height="8" fill="#f5dccd"/><rect width="284.8" height="8" fill="#c14920" opacity="0.7"/></pattern></defs>
-      <text x="0" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Unfiltered histogram / 3h</text>
+    <svg width="100%" viewBox="0 0 692 150" xmlns="http://www.w3.org/2000/svg" role="img">
+      <text x="0" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Disk used after settling (GB — lower is better)</text>
       <line x1="0" y1="27" x2="680" y2="27" stroke="#e0d9c8" stroke-width="1"/>
-      <text x="110" y="46" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">Prometheus · 28 GB</text>
-      <rect x="118" y="37" width="284.8" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="118" y="37" width="284.8" height="12" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="526" y="46.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">190.7s</text>
-      <text x="110" y="62" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">Prometheus · 14 GB</text>
-      <rect x="118" y="53" width="351.8" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="118" y="53" width="400" height="12" rx="2" fill="url(#oom)"/>
-      <text x="526" y="62.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#c14920">OOMKilled</text>
-      <text x="110" y="82" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">Mimir · 28 GB</text>
-      <rect x="118" y="73" width="351.8" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="118" y="73" width="351.8" height="12" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="526" y="82.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">235.5s</text>
-      <text x="110" y="98" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">Mimir · 14 GB</text>
-      <rect x="118" y="89" width="352.9" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="118" y="89" width="352.9" height="12" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="526" y="98.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">236.3s</text>
-      <text x="110" y="118" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">O2 / Parquet · 28 GB</text>
-      <rect x="118" y="109" width="39.7" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="118" y="109" width="39.7" height="12" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="526" y="118.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">26.6s</text>
-      <text x="110" y="134" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">O2 / Parquet · 14 GB</text>
-      <rect x="118" y="125" width="40.8" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="118" y="125" width="40.8" height="12" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="526" y="134.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">27.3s</text>
-      <text x="110" y="154" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">O2 / Vortex · 28 GB</text>
-      <rect x="118" y="145" width="42.4" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="118" y="145" width="42.4" height="12" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="526" y="154.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">28.4s</text>
-      <text x="110" y="170" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">O2 / Vortex · 14 GB</text>
-      <rect x="118" y="161" width="39.1" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="118" y="161" width="39.1" height="12" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="526" y="170.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">26.2s</text>
-      <text x="0" y="198" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">Unfiltered histogram / 6h</text>
-      <line x1="0" y1="206" x2="680" y2="206" stroke="#e0d9c8" stroke-width="1"/>
-      <text x="110" y="225" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">Prometheus · 28 GB</text>
-      <rect x="118" y="216" width="400.0" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="118" y="216" width="400.0" height="12" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="526" y="225.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">267.8s</text>
-      <text x="110" y="241" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">Prometheus · 14 GB</text>
-      <rect x="118" y="232" width="350.9" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="118" y="232" width="400" height="12" rx="2" fill="url(#oom)"/>
-      <text x="526" y="241.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#c14920">OOMKilled</text>
-      <text x="110" y="261" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">Mimir · 28 GB</text>
-      <rect x="118" y="252" width="350.9" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="118" y="252" width="350.9" height="12" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="526" y="261.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">234.9s</text>
-      <text x="110" y="277" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">Mimir · 14 GB</text>
-      <rect x="118" y="268" width="351.0" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="118" y="268" width="351.0" height="12" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="526" y="277.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">235.0s</text>
-      <text x="110" y="297" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">O2 / Parquet · 28 GB</text>
-      <rect x="118" y="288" width="70.1" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="118" y="288" width="70.1" height="12" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="526" y="297.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">46.9s</text>
-      <text x="110" y="313" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">O2 / Parquet · 14 GB</text>
-      <rect x="118" y="304" width="66.3" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="118" y="304" width="66.3" height="12" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="526" y="313.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">44.4s</text>
-      <text x="110" y="333" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">O2 / Vortex · 28 GB</text>
-      <rect x="118" y="324" width="68.0" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="118" y="324" width="68.0" height="12" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="526" y="333.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">45.5s</text>
-      <text x="110" y="349" text-anchor="end" font-family="sans-serif" font-size="10.5" fill="#4a4a45">O2 / Vortex · 14 GB</text>
-      <rect x="118" y="340" width="63.3" height="12" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="118" y="340" width="63.3" height="12" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="526" y="349.5" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#1a1a17">42.4s</text>
-      </svg>
-    <figcaption>Figure 6 · The million-series histogram at both memory limits. Only Prometheus changes behaviour.</figcaption>
+      <text x="112" y="50" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">VictoriaMetrics</text>
+      <rect x="120" y="38" width="45.3" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="173" y="50" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1.06 GB</text>
+      <text x="112" y="76" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">OpenObserve</text>
+      <rect x="120" y="64" width="95.3" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="223" y="76" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2.23 GB</text>
+      <text x="112" y="102" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
+      <rect x="120" y="90" width="253.4" height="16" rx="2" fill="#c14920" opacity="0.92"/>
+      <text x="381" y="102" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">5.93 GB</text>
+      <text x="112" y="128" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
+      <rect x="120" y="116" width="470.0" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
+      <text x="598" y="128" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">11.0 GB</text>
+    </svg>
+    <figcaption>Figure 4 · Storage for 2.22 billion samples. Mimir's figure includes copies it keeps until its 12–13 hour cleanup timers expire.</figcaption>
   </figure>
 
-  <p>The reason shows up in a direct measurement. A single 3-hour unfiltered histogram peaks at <strong>18.7GB RSS in Prometheus</strong> against <strong>4.25GB in Mimir</strong> — Prometheus loads samples into memory, and at <code>--query.max-samples=1e9</code> and ~16 bytes per sample that is ~16GB, matching the measured rise almost exactly. <strong>Raising the limit so the query can run, and having the query consume 20GB, are the same decision.</strong> Mimir answers it in a quarter of the memory and takes 35% longer; on a 14 GB box that is the difference between an answer and a restart.</p>
+  <p><strong>VictoriaMetrics is the most compact</strong>, at about half a byte per sample. OpenObserve stores the same data in 2.23 GB, about one byte per sample, and that includes its metrics index — 0.67 GB, or 0.30 bytes per sample — which is what makes the queries above fast. The data itself is general-purpose columnar Parquet: the same files serve SQL as well as PromQL, and map directly onto object storage, where they typically live in production.</p>
 
-  <p>Worth noting how this was captured at all: <code>curl</code> cannot distinguish an OOMKill from a network failure — both surface as HTTP 000. The harness records a per-request timestamp and samples container restart state before and after each run, so <code>finishedAt=16:58:26Z</code> could be matched to the exact request that triggered it. Without that, this result would read "connection failure" and mean nothing.</p>
+  <p>Prometheus keeps its most recent ~3 hours in memory-mapped head chunks and the WAL by design, so roughly two thirds of its 5.93 GB is that window. Mimir's figure is what was on disk while the queries ran: it keeps the ingester's local copy of each block for 13 hours after upload and compacted-away blocks for 12 hours, so it holds the data more than once until those timers expire.</p>
 
   <hr class="divider">
 
   <h2>The bottom line</h2>
 
-  <p>Put the same ~2.2 billion samples and ~1.09 million bucket series in front of four systems, and the results condense to four sentences:</p>
+  <p>Put the same 2.2 billion samples and 1.34 million series in front of four systems with the same resources, and the results condense to four sentences:</p>
 
   <ul>
-    <li><strong>Ingestion memory:</strong> OpenObserve stays flat at 1.5–2.1GB — about half of Prometheus and a third of Mimir, and under 600MB once ingestion stops. The trade-off is ~2.5× the disk of Prometheus (typically on object storage)</li>
-    <li><strong>Everyday queries:</strong> on irate at 6h, OpenObserve is ~10.8× faster than Prometheus and ~8.7× faster than Mimir; on filtered histograms Vortex leads Prometheus by 1.9×, while Parquet trails it by 1.7×</li>
-    <li><strong>The high-cardinality limit:</strong> on the million-series unfiltered histogram, stock limits make Prometheus and Mimir refuse the query outright. Raised to match, all four complete — OpenObserve in 27s at 3h against 3.2 and 4.1 minutes</li>
-    <li><strong>The format race:</strong> Vortex is 2.9×–3.2× faster than Parquet on filtered queries and ties on full scans — for dashboard-style filtered workloads, Vortex is the better default</li>
+    <li><strong>Fastest everywhere:</strong> OpenObserve answers all 16 query/window combinations fastest — geomean 0.31× VictoriaMetrics' latency, 6% of Mimir's and 2% of Prometheus'</li>
+    <li><strong>The high-cardinality limit:</strong> the unfiltered histogram over 1.18M series and 6 hours takes OpenObserve 3.7s, VictoriaMetrics 8.8s, Mimir 71s and Prometheus 4m 17s — and needs raised limits on every system to run at all</li>
+    <li><strong>Everyday queries:</strong> irate at 6h answers in 112ms against 314ms, 2.6s and 10.4s; filtered histograms are the closest race, 1.3–1.5× ahead of VictoriaMetrics at 6h and 4–5× at 30m</li>
+    <li><strong>Storage:</strong> VictoriaMetrics is the most compact at 1.06 GB; OpenObserve uses 2.23 GB including its metrics index, ahead of Prometheus at 5.9 GB and Mimir at 11 GB</li>
   </ul>
 
   <div class="pull">
-    In high-cardinality metrics, the real dividing line isn't a few hundred milliseconds of latency — it's <strong>whether your queries still return at all once series counts cross a million</strong>.
+    In high-cardinality metrics, the real dividing line isn't a few hundred milliseconds — it's <strong>how long the query that touches every series takes once there are more than a million of them</strong>.
   </div>
 
   <div class="footnote">
     <strong>Test notes:</strong>
     <ul>
-      <li>Versions: Prometheus <code>v3.6.0</code>, Mimir <code>grafana/mimir:latest</code>, OpenObserve <code>v0.92.0</code>; the two OpenObserve deployments differ only in <code>ZO_FILE_FORMAT</code> (parquet/vortex)</li>
-      <li>Mimir's ingestion limits (ingestion_rate, max_global_series_per_user, etc.) were raised so writes were never throttled by defaults; the query-side chunk limit was raised to 20e6 for the same reason as Prometheus's sample limit</li>
-      <li>One dedicated EC2 m7gd.2xlarge per system: 7 CPU, 474 GB local NVMe, container memory limit 28 GB then 14 GB, all single-node deployments</li>
-      <li>All query caches disabled; OpenObserve's Parquet filter pushdown disabled (<code>ZO_FEATURE_PUSHDOWN_FILTER_ENABLED=false</code> — on by default, but ~20% slower in our metrics tests)</li>
-      <li>Data generated by fake-webserver on 24 pods (~45k bucket series each, ~1.09M total), shipped through a standalone OTel Collector writing to all systems simultaneously; ~2.2B samples across the <code>codelab_api_*</code> metrics, measured as 44.3M samples per 10 minutes scaled to the 8h23m run</li>
-      <li>Ingestion 2026-08-09 04:47–13:10 UTC, then stopped; query windows of 30m / 1h / 3h / 6h all ending 2026-08-09 12:00 UTC; every query run 3 times, plus one cold first-touch request excluded from the medians</li>
-      <li>Prometheus / Mimir errors stem from default protective limits; raising them may allow completion at the cost of higher per-query memory risk</li>
+      <li>Versions: Prometheus <code>v3.6.0</code>, Mimir <code>grafana/mimir:latest</code> (pulled 2026-10-15), VictoriaMetrics <code>v1.154.0</code>, OpenObserve <code>v1.1.0</code> with its metrics index enabled (<code>ZO_METRICS_INDEX_ENABLED=true</code>)</li>
+      <li>One dedicated EC2 m7gd.4xlarge per system, local NVMe, every container 12 CPU / 24 GB with requests equal to limits, all single-node</li>
+      <li>Result caches disabled on every system</li>
+      <li>Query limits raised on all four so the million-series histogram is answered rather than refused; a 600s timeout everywhere. At stock limits Prometheus, Mimir and VictoriaMetrics refuse some of the unfiltered histogram windows</li>
+      <li>Data from fake-webserver v5 in backfill mode: 14 simulated nodes, 7 hours at 15s, 2,218,011,632 samples across 1,338,330 series, identical remote-write requests to all four; 0 retries, 0 rejected samples</li>
+      <li>Prometheus and Mimir accept the backfill with a 2-hour out-of-order window; every system finished its compaction and cleanup before the first query</li>
+      <li>Query windows 30m / 1h / 3h / 6h ending 2026-09-28 10:00 UTC; each cell run 5 times (the unfiltered 3h and 6h once) in two back-to-back passes, medians pooled across both; one cold first-touch request per cell excluded</li>
+      <li>Filtered queries use <code>path="/api/bar"</code> and <code>path=~"/api/bar"</code></li>
       <li>Multipliers are rounded — the point is the order of magnitude, not the decimals</li>
+      <li>We removed Vortex from these results: with the new metrics index, OpenObserve on Vortex queries no faster than on Parquet, yet takes more than twice the disk</li>
     </ul>
   </div>
 

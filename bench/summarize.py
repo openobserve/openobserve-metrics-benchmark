@@ -17,12 +17,10 @@ import statistics
 import sys
 from collections import defaultdict
 
-# The o2-* keys are NAMESPACE names carried through from config.sh, and what
-# distinguishes the two deployments has changed from round to round: first
-# ZO_FILE_FORMAT, then the image, then the on-disk layout written by an earlier
-# image. A hardcoded version in the label goes stale silently and mislabels a
-# whole report, so the version half is read from the run's own metadata instead
-# -- see system_labels().
+# The o2-parquet key is a NAMESPACE name carried through from config.sh. A
+# hardcoded version in a label goes stale silently and mislabels a whole report,
+# so the version half is read from the run's own metadata instead -- see
+# system_labels().
 SYSTEM_ORDER = ["prometheus", "mimir", "vm", "o2-parquet"]
 SYSTEM_LABEL = {
     "prometheus": "Prometheus",

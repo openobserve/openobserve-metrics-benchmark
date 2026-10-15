@@ -1,4 +1,4 @@
-# OpenObserve standalone, ZO_FILE_FORMAT=parquet. Only non-default chart values.
+# OpenObserve standalone. Only non-default chart values.
 image:
   oss:
     repository: public.ecr.aws/zinclabs/openobserve
@@ -34,16 +34,12 @@ extraEnv:
     value: "40000"
   - name: ZO_METRICS_MAX_POINTS_PER_SERIES
     value: "10000000"
-  - name: ZO_FEATURE_PUSHDOWN_FILTER_ENABLED
-    value: "false"
   - name: ZO_RESULT_CACHE_ENABLED
     value: "false"
   - name: ZO_METRICS_INDEX_ENABLED
     value: "true"
   - name: ZO_METRICS_BLOCKS_CACHE_MAX_SIZE
     value: "2048"
-  - name: ZO_FILE_MERGE_THREAD_NUM
-    value: "1"
   - name: ZO_COMPACT_DELETE_FILES_DELAY_MINUTES
     value: "10"
   # "false" during the backfill, "true" once file_list holds every sample.
@@ -51,8 +47,6 @@ extraEnv:
     value: "true"
   - name: ZO_MAX_FILE_RETENTION_TIME
     value: "60"
-  - name: ZO_FILE_FORMAT
-    value: "parquet"
 
 resources:
   limits:

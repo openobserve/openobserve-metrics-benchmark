@@ -31,12 +31,8 @@
 # The systems under test, in report order. Format: label|base_url|auth
 # (auth is empty for the systems that need none).
 #
-# The two OpenObserve labels are NAMESPACE names, and what distinguishes the
-# two deployments has changed from round to round -- first ZO_FILE_FORMAT, then
-# the image. In this round both run the same dev build and ZO_FILE_FORMAT is
-# the A/B variable again, so the labels do describe what each one writes.
-# Do not assume that for an older results directory: summarize.py derives the
-# version from the run's own run-metadata.txt rather than trusting these names.
+# `o2-parquet` is the OpenObserve NAMESPACE name; summarize.py reports it as
+# OpenObserve and takes the version from the run's own run-metadata.txt.
 SYSTEMS=(
   "prometheus|${PROM_BASE}|"
   "mimir|${MIMIR_BASE}|"

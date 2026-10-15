@@ -74,19 +74,19 @@ backfill's start must be within the last month. The default dataset,
 raise the retention, and check `vm_rows_added_to_storage_total` afterwards.
 
 **`openobserve-parquet/`** — `openobserve-standalone` chart, release `o2`,
-`ZO_FILE_FORMAT=parquet`. A Vortex deployment was dropped: with the metrics
+Parquet (the default file format). A Vortex deployment was dropped: with the metrics
 index it queries no faster and takes more than twice the disk. Confirm what
 reached the process before every round — the chart's ConfigMap carries its own
 defaults, and it is the explicit `env` that wins:
 
 ```bash
 kubectl -n perf-o2-parquet exec o2-openobserve-standalone-0 -- \
-  sh -c 'tr "\0" "\n" </proc/1/environ | grep -E "ZO_FILE_FORMAT|ZO_COMPACT|ZO_METRICS|ZO_FILE_MERGE" | sort'
+  sh -c 'tr "\0" "\n" </proc/1/environ | grep -E "ZO_COMPACT|ZO_METRICS|ZO_RESULT_CACHE|ZO_MAX_FILE" | sort'
 ```
 
 The values files carry `ZO_COMPACT_ENABLED` and `ZO_MAX_FILE_RETENTION_TIME=60`
-for the backfill procedure below; `ZO_RESULT_CACHE_ENABLED=false` and
-`ZO_FEATURE_PUSHDOWN_FILTER_ENABLED=false` for the comparison.
+for the backfill procedure below, and `ZO_RESULT_CACHE_ENABLED=false` so warm
+runs re-execute the query.
 
 ## The load: fake-webserver v5 backfill
 
@@ -141,8 +141,7 @@ OpenObserve takes one extra step, in this order:
 2. **Wait for the flush** (the first column above).
 3. **Switch compaction on:** `ZO_COMPACT_ENABLED=true` in the values file,
    re-run its `install.sh`. Merging starts within a minute and each hour is
-   merged once, whole. Keep `ZO_FILE_MERGE_THREAD_NUM=1`: the backlog is ~290
-   files per hour, and the default 6 workers OOM at 24 GB.
+   merged once, whole.
 4. **Wait for settled** (the second column).
 
 A changed `ZO_COMPACT_MAX_FILE_SIZE` on already-merged data does nothing by

@@ -18,6 +18,6 @@ perf-o2-parquet is up.
   write: http://o2-openobserve-standalone.perf-o2-parquet.svc.cluster.local:5080/api/default/prometheus/api/v1/write
   query: http://o2-openobserve-standalone.perf-o2-parquet.svc.cluster.local:5080/api/default/prometheus/api/v1/query_range
 
-Confirm the file format actually took effect:
-  kubectl -n perf-o2-parquet exec sts/o2-openobserve-standalone -- printenv ZO_FILE_FORMAT
+Confirm the settings actually took effect:
+  kubectl -n perf-o2-parquet exec sts/o2-openobserve-standalone -- printenv ZO_COMPACT_ENABLED ZO_METRICS_INDEX_ENABLED
 EOF
