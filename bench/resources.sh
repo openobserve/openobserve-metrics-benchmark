@@ -34,18 +34,23 @@ INTERVAL="${2:-60}"
 
 # Namespaces default to what deploy/ installs, but are overridable for a
 # deployment that drifted:
-#   O2_PARQUET_NS=my-parquet-ns O2_VORTEX_NS=my-vortex-ns ./resources.sh
+#   O2_PARQUET_NS=my-parquet-ns ./resources.sh
 : "${PROM_NS:=perf-prometheus}"
 : "${MIMIR_NS:=perf-mimir}"
+: "${VM_NS:=perf-vm}"
 : "${O2_PARQUET_NS:=perf-o2-parquet}"
-: "${O2_VORTEX_NS:=perf-o2-vortex}"
 
 # label|namespace|statefulset|data dir under ${NVME_MOUNT}
+#
+# The data dir carries the dataset name -- see deploy/README.md#datasets. It is
+# passed in rather than hardcoded so a run against another dataset still reads
+# the right directory:  DATASET=run-b ./resources.sh
+: "${DATASET:=run-a}"
 TARGETS=(
-  "prometheus|${PROM_NS}|prometheus-standalone|prometheus"
-  "mimir|${MIMIR_NS}|mimir-standalone|mimir"
-  "o2-parquet|${O2_PARQUET_NS}|o2-openobserve-standalone|o2-parquet"
-  "o2-vortex|${O2_VORTEX_NS}|o2-openobserve-standalone|o2-vortex"
+  "prometheus|${PROM_NS}|prometheus-standalone|${DATASET}/prometheus"
+  "mimir|${MIMIR_NS}|mimir-standalone|${DATASET}/mimir"
+  "vm|${VM_NS}|vms-victoria-metrics-single-server|${DATASET}/victoriametrics"
+  "o2-parquet|${O2_PARQUET_NS}|o2-openobserve-standalone|${DATASET}/o2-parquet"
 )
 
 # Disk comes from the node, not from kubelet: the systems write to a hostPath
@@ -141,7 +146,6 @@ after compaction fully settled):
   Prometheus              1.25          4.3 GB   4.5 GB
   Mimir                   0.9           5.2 GB   7.4 GB
   OpenObserve (Parquet)   2.4           1.5 GB   15.5 GB
-  OpenObserve (Vortex)    2.0           1.8 GB   15.1 GB
 
 DISK SETTLES AT DIFFERENT TIMES PER SYSTEM -- measure late:
 

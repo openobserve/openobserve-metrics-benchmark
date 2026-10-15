@@ -2,8 +2,8 @@
 # Drops the OS page cache on the node hosting a system under test, so the next
 # query is genuinely COLD.
 #
-#   ./drop-caches.sh o2-vortex
-#   ./drop-caches.sh o2-vortex && QUERY_FILTER=histogram-regex SYSTEMS_FILTER=o2-vortex RUNS=1 ./run-benchmark.sh
+#   ./drop-caches.sh o2-parquet
+#   ./drop-caches.sh o2-parquet && QUERY_FILTER=histogram-regex SYSTEMS_FILTER=o2-parquet RUNS=1 ./run-benchmark.sh
 #
 # This is what produced the article's cold-vs-hot observation: the 3h histogram
 # runs ~2s hot and ~30s cold on gp3 at its default 125 MB/s, because the query
@@ -16,26 +16,26 @@ set -euo pipefail
 
 # Namespaces default to what deploy/ installs, but are overridable for a
 # deployment that drifted:
-#   O2_PARQUET_NS=my-parquet-ns O2_VORTEX_NS=my-vortex-ns ./drop-caches.sh o2-parquet
+#   O2_PARQUET_NS=my-parquet-ns ./drop-caches.sh o2-parquet
 : "${PROM_NS:=perf-prometheus}"
 : "${MIMIR_NS:=perf-mimir}"
+: "${VM_NS:=perf-vm}"
 : "${O2_PARQUET_NS:=perf-o2-parquet}"
-: "${O2_VORTEX_NS:=perf-o2-vortex}"
 
 case "${1:-}" in
   prometheus) NS="${PROM_NS}";       POD=prometheus-standalone-0 ;;
   mimir)      NS="${MIMIR_NS}";      POD=mimir-standalone-0 ;;
+  vm)         NS="${VM_NS}";         POD=vms-victoria-metrics-single-server-0 ;;
   o2-parquet) NS="${O2_PARQUET_NS}"; POD=o2-openobserve-standalone-0 ;;
-  o2-vortex)  NS="${O2_VORTEX_NS}";  POD=o2-openobserve-standalone-0 ;;
   all)        NS=""; POD="" ;;
-  *) echo "usage: $0 {prometheus|mimir|o2-parquet|o2-vortex|all}" >&2; exit 1 ;;
+  *) echo "usage: $0 {prometheus|mimir|vm|o2-parquet|all}" >&2; exit 1 ;;
 esac
 
 # `all` drops the cache on every benchmark node, which is what you want between
 # rounds of a cold comparison -- dropping only one node's cache would leave the
 # other three warm and make the comparison meaningless.
 if [[ "${1}" == "all" ]]; then
-  for sys in prometheus mimir o2-parquet o2-vortex; do
+  for sys in prometheus mimir vm o2-parquet; do
     "$0" "${sys}"
   done
   exit 0

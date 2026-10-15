@@ -12,16 +12,23 @@ A cell where every run errored renders as `error x3`, exactly as in the article
 """
 
 import csv
+import os
 import statistics
 import sys
 from collections import defaultdict
 
-SYSTEM_ORDER = ["prometheus", "mimir", "o2-parquet", "o2-vortex"]
+# The o2-* keys are NAMESPACE names carried through from config.sh, and what
+# distinguishes the two deployments has changed from round to round: first
+# ZO_FILE_FORMAT, then the image, then the on-disk layout written by an earlier
+# image. A hardcoded version in the label goes stale silently and mislabels a
+# whole report, so the version half is read from the run's own metadata instead
+# -- see system_labels().
+SYSTEM_ORDER = ["prometheus", "mimir", "vm", "o2-parquet"]
 SYSTEM_LABEL = {
     "prometheus": "Prometheus",
     "mimir": "Mimir",
-    "o2-parquet": "O2 · Parquet",
-    "o2-vortex": "O2 · Vortex",
+    "vm": "VictoriaMetrics",
+    "o2-parquet": "OpenObserve",
 }
 QUERY_LABEL = {
     "irate": "1 · irate",
@@ -53,6 +60,35 @@ def load(path):
     return warm, cold, queries, windows
 
 
+def system_labels(raw_path, systems):
+    """`{system: label}`, with the image each system actually ran appended.
+
+    run-benchmark.sh writes run-metadata.txt next to raw.csv and
+    run-in-cluster.sh appends an `image_<system>` line per deployment. Deriving
+    the label from that makes a table impossible to mislabel: two deployments
+    running the same build show the same version, and a build swap between
+    rounds shows up without anyone editing this file.
+    """
+    images = {}
+    meta = os.path.join(os.path.dirname(os.path.abspath(raw_path)), "run-metadata.txt")
+    try:
+        with open(meta) as fh:
+            for line in fh:
+                key, _, value = line.partition(" ")
+                if key.startswith("image_") and value.strip():
+                    images[key[len("image_"):]] = value.strip()
+    except OSError:
+        pass
+
+    labels = {}
+    for system in systems:
+        base = SYSTEM_LABEL.get(system, system)
+        # The tag is the version; the repository only repeats what `base` says.
+        tag = images.get(system, "").rpartition(":")[2]
+        labels[system] = f"{base} · {tag}" if tag else base
+    return labels
+
+
 def cell(runs):
     """The article's cell format: every run on its own line, or `error xN`."""
     if not runs:
@@ -81,6 +117,7 @@ def main():
     systems = order(seen_systems, SYSTEM_ORDER)
     windows = order(windows, WINDOW_ORDER)
     queries = order(queries, list(QUERY_LABEL))
+    labels = system_labels(sys.argv[1], systems)
 
     out = ["# Benchmark results", "", "All values are milliseconds of client-observed "
            "wall time. Every run is shown; `error ×N` means the system refused the "
@@ -88,7 +125,7 @@ def main():
 
     for q in queries:
         out += [f"### {QUERY_LABEL.get(q, q)}", ""]
-        out.append("| Window | " + " | ".join(SYSTEM_LABEL.get(s, s) for s in systems) + " |")
+        out.append("| Window | " + " | ".join(labels[s] for s in systems) + " |")
         out.append("| --- |" + " --- |" * len(systems))
         for w in windows:
             if w not in rows[q]:
@@ -102,7 +139,7 @@ def main():
                 "warm runs above. This is what the first query after a gap "
                 "costs — file opens, index loads, page cache misses — not what "
                 "a warm dashboard costs.", "",
-                "| Query | Window | " + " | ".join(SYSTEM_LABEL.get(s, s) for s in systems) + " |",
+                "| Query | Window | " + " | ".join(labels[s] for s in systems) + " |",
                 "| --- | --- |" + " --- |" * len(systems)]
         for q in queries:
             for w in windows:
@@ -115,7 +152,7 @@ def main():
     widest = windows[-1] if windows else None
     if widest:
         out += [f"### {widest} medians, all queries", "",
-                "| Query | " + " | ".join(SYSTEM_LABEL.get(s, s) for s in systems) + " |",
+                "| Query | " + " | ".join(labels[s] for s in systems) + " |",
                 "| --- |" + " --- |" * len(systems)]
         for q in queries:
             if widest not in rows[q]:

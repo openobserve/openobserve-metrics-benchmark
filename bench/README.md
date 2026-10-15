@@ -3,6 +3,11 @@
 Measurement scripts. Everything reads `config.sh`, and every value in it can be
 overridden from the environment.
 
+The systems under test, in report order, are `prometheus`, `mimir`, `vm`,
+and `o2-parquet` (reported as OpenObserve) — `SYSTEMS` in `config.sh`. Those labels are what
+`SYSTEMS_FILTER`, `drop-caches.sh` and the results use. Remove a line from
+`SYSTEMS` to leave a system out; nothing else depends on the count.
+
 ## Order of operations
 
 ```bash
@@ -12,12 +17,12 @@ overridden from the environment.
 
 Both run from a pod inside the cluster; no port-forward and no second terminal.
 `run-in-cluster.sh` is the one to use for timings. `run-benchmark.sh` is the
-driver it runs by default; call it directly only when you already reach the four
-systems without a port-forward. See [Measure from inside the
+driver it runs by default; call it directly only when you already reach the
+systems under test without a port-forward. See [Measure from inside the
 cluster](#measure-from-inside-the-cluster) — a port-forwarded run has a ~1-2
 second floor under every number.
 
-`--script` takes any `bench/` script that talks to the four systems over HTTP,
+`--script` takes any `bench/` script that talks to the systems under test over HTTP,
 plus its own arguments:
 
 ```bash
@@ -28,7 +33,7 @@ plus its own arguments:
 rather than HTTP, and the runner pod has neither the binary nor the RBAC. Run
 those from your workstation, where they never needed a port-forward either.
 
-`cardinality.sh` is not optional. If the four systems disagree on how many
+`cardinality.sh` is not optional. If the systems disagree on how many
 series they hold, they did not receive the same data and the latency numbers
 compare nothing. Fix that before you measure anything.
 
@@ -54,8 +59,8 @@ histogram_quantile(0.9, sum by(le, path) (
 ```
 
 Query 2 is the stress test — it touches all ~1.08M bucket series. At stock
-limits Prometheus and Mimir *refuse* it outright; `deploy/` raises those limits
-so all four actually run it. `run-benchmark.sh` records any error text and
+limits **every** system refuses it outright; `deploy/` raises those limits so
+they actually run it — see [deploy/README.md](../deploy/README.md#query-limits). `run-benchmark.sh` records any error text and
 `summarize.py` renders an all-error cell as `error ×N`.
 
 Queries 3 and 4 exist as a pair to show that the *filter type* barely matters —
@@ -66,35 +71,38 @@ scan volume does.
 | Variable | Default | Notes |
 | --- | --- | --- |
 | `END_TIME` | 5 minutes ago | RFC3339 or unix ts. **Pin it** when comparing runs across days |
-| `WINDOWS` | `1800 3600 10800` | Seconds: 30m, 1h, 3h |
-| `STEP` | `15s` | Resolution for `query_range`. See the warning below |
+| `WINDOWS` | `1800 3600 10800 21600` | Seconds: 30m, 1h, 3h, 6h |
+| `STEP` | empty → per window | Empty means Grafana's rule, `max(15s, range/1000)` rounded up. See the warning below |
+| `MAX_DATA_POINTS` / `MIN_INTERVAL` | `1000` / `15` | The two inputs to that rule |
 | `RUNS` | `3` | Repeats per (system, query, window) |
 | `WARMUP` | `1` | Cold first-touch request, recorded as run 0, excluded from medians |
-| `SINGLE_RUN_CELLS` | `histogram-unfiltered:3h` | Cells recorded once instead of `RUNS` |
-| `PATH_FILTER` | `/api/service-1` | The `$path` in queries 3 and 4 |
+| `SINGLE_RUN_CELLS` | `histogram-unfiltered:3h histogram-unfiltered:6h` | Cells recorded once instead of `RUNS` |
+| `PATH_FILTER` | `/api/bar` | The `$path` in queries 3 and 4. One of the four heavy paths — see `config.sh` |
 | `CURL_TIMEOUT` | `700` | Must exceed the servers' own 600s query timeout |
 | `SYSTEMS_FILTER` | — | Substring; run one system only |
 | `QUERY_FILTER` | — | Substring; run one query only |
 | `O2_USER` / `O2_PASS` | `root@example.com` / `Complexpass#123` | Must match the OpenObserve values files |
 
-> **About `STEP`.** The published article does not record the step it used, and
-> `query_range` requires one. `15s` matches the scrape interval, so the point
-> count scales linearly with the window — consistent with the near-linear
-> latency growth the article reports. It is still an assumption. Step is the
-> largest single lever on absolute latency in this benchmark, so state yours
-> whenever you publish numbers.
+> **About `STEP`.** `query_range` requires one, and it is the largest single
+> lever on absolute latency here — so state yours whenever you publish numbers.
+> The default is not a fixed value: it is computed per window the way Grafana
+> computes it, `max(15s, range/1000)` rounded up to a tidy interval, which caps
+> the response at roughly a panel's width in points. Under that rule 30m/1h/3h
+> all land on 15s (the scrape interval floors them) and only 6h widens, to 30s.
+> Set `STEP` explicitly to pin one value for every window instead.
 
 Examples:
 
 ```bash
-# Reproduce the article's exact window
-END_TIME=2026-08-06T03:00:00+08:00 ./run-benchmark.sh
+# The backfilled dataset's window (2026-09-28 10:00 UTC), five recorded runs
+RUNS=5 END_TIME=1790589600 ./run-in-cluster.sh
 
-# Just the headline query, just Vortex
-QUERY_FILTER=histogram-regex SYSTEMS_FILTER=o2-vortex ./run-benchmark.sh
+# Just the headline query, just one system
+QUERY_FILTER=histogram-regex SYSTEMS_FILTER=o2-parquet ./run-benchmark.sh
 
-# A different endpoint, in case /api/service-1 is unusually quiet
-PATH_FILTER=/api/foo ./run-benchmark.sh
+# A generated path -- about half the bucket series of /api/bar, so about half
+# the filtered-histogram numbers
+PATH_FILTER=/api/service-1 ./run-benchmark.sh
 
 # What paths exist?
 ./cardinality.sh paths
@@ -127,12 +135,11 @@ The overhead is not a constant you can subtract — it grows with response size,
 so it swamps a fast system and barely dents a slow one. Same `irate` query, same
 `END_TIME`:
 
-| System | via port-forward | in-cluster |
+| System (2026-08-09) | via port-forward | in-cluster |
 | --- | --- | --- |
 | Prometheus | 3445 ms | 1287 ms |
 | Mimir | 4181 ms | 1319 ms |
 | OpenObserve · Parquet | 2122 ms | 158 ms |
-| OpenObserve · Vortex | 1953 ms | 297 ms |
 
 A real 8.1× gap reads as 1.6× through the tunnel. The fastest system is punished
 hardest.
@@ -144,7 +151,7 @@ systems' AZ, runs the driver against ClusterIP DNS, and copies
 
 ```bash
 RUNS=5 WINDOWS="1800 3600" ./run-in-cluster.sh
-O2_PARQUET_NS=my-parquet-ns O2_VORTEX_NS=my-vortex-ns ./run-in-cluster.sh
+O2_PARQUET_NS=my-parquet-ns ./run-in-cluster.sh
 ./run-in-cluster.sh --delete     # remove the runner pod
 ```
 
@@ -167,17 +174,17 @@ metrics-server is needed.
 > `workset` is cgroup `workingSetBytes` = rss + active page cache + kernel
 > memory. A system writing data files continuously accumulates page cache, so
 > OpenObserve reads ~1.5GB rss against ~10GB workset — by workset it looks like
-> the heaviest of the four, by rss it is the lightest. **Compare on rss**, and
-> say so when you publish. (rss excludes file-backed mmap pages, so it
-> undercounts Prometheus and Mimir; they still land above OpenObserve.) CPU is an instantaneous rate — take several snapshots during
+> the heaviest system, by rss it is the lightest. **Compare on rss**, and say so
+> when you publish. (rss excludes file-backed mmap pages, so it undercounts
+> engines that mmap their chunk files.) CPU is an instantaneous rate — take several snapshots during
 steady-state ingestion rather than trusting one reading. Disk only means
 something after ingestion has run long enough to compact.
 
 ## Cold queries
 
 ```bash
-./drop-caches.sh o2-vortex
-SYSTEMS_FILTER=o2-vortex QUERY_FILTER=histogram-regex RUNS=1 ./run-benchmark.sh
+./drop-caches.sh o2-parquet
+SYSTEMS_FILTER=o2-parquet QUERY_FILTER=histogram-regex RUNS=1 ./run-benchmark.sh
 ```
 
 This evicts the OS page cache on the node hosting that system, so the next query

@@ -98,15 +98,13 @@ done
 
 cat <<'EOF'
 
-For reference, the published run measured:
-  codelab_api_request_duration_seconds_bucket   1,085,760 series
-  codelab_api_request_duration_seconds_count       41,760 series
+For reference, the v5 backfill at -num-nodes=14 (deploy/fake-webserver/)
+produces, on every system:
+  codelab_api_request_duration_seconds_bucket   1,179,360 series
+  codelab_api_request_duration_seconds_count       45,360 series
 The bucket count is exactly 26x the _count -- the histogram has 25 explicit
 buckets plus +Inf. If your ratio is not 26, your load generator differs.
 
-Cardinality scales linearly with fake-webserver replicas: measured at ~45,220
-bucket and ~1,739 _count series per pod. deploy/fake-webserver/deploy.yaml ships
-24 replicas, which is what puts the bucket metric over a million series. Scale
-that value for a different series count -- the same cluster at 20 replicas
-measured 904,410 bucket and 1,013,150 total active series.
+Cardinality scales linearly with -num-nodes: 84,240 bucket series per simulated
+node. Round 1's published run (24 v2 pods) measured 1,085,760 bucket series.
 EOF

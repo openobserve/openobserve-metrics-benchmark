@@ -1,123 +1,91 @@
 # openobserve-metrics-benchmark
 
-Everything needed to re-run the benchmark behind **"One Dataset, Four Systems —
-Benchmarking Prometheus, Mimir, and OpenObserve on Metrics Ingestion and
-Queries"**: the manifests, the collector config, the queries, and the scripts
-that measure them.
+Everything needed to run the metrics benchmark that compares **Prometheus,
+Grafana Mimir, VictoriaMetrics and OpenObserve** on the same data: the manifests, the load generator, the queries, and
+the scripts that measure them.
 
-The design in one sentence: **one OTel Collector scrapes one synthetic workload
-and fans it out, unchanged, to four systems at once**, so every system ingests
-byte-identical data and the same PromQL can be run against all of them.
+The design in one sentence: **one synthetic workload is written, unchanged, to
+four systems at once**, so every system ingests byte-identical data and the same
+PromQL runs against all of them.
 
 ```
-                                 ┌──────────────────────────────┐
-                                 │  Prometheus  v3.6.0          │  7 CPU / 28 GB / NVMe
-                                 ├──────────────────────────────┤
-  fake-webserver  ──scrape──►    │  Mimir       (single binary) │  7 CPU / 28 GB / NVMe
-  24 pods, 15s     OTel      ──► ├──────────────────────────────┤
-  ~1.09M series    Collector     │  OpenObserve ZO_FILE_FORMAT= │  7 CPU / 28 GB / NVMe
-                   (gateway)     │              parquet         │
-                                 ├──────────────────────────────┤
-                                 │  OpenObserve ZO_FILE_FORMAT= │  7 CPU / 28 GB / NVMe
-                                 │              vortex          │
-                                 └──────────────────────────────┘
+                                      ┌────────────────────────────────────┐
+                                      │  Prometheus       v3.6.0           │
+                                      ├────────────────────────────────────┤
+  fake-webserver v5                   │  Mimir            single binary    │
+  backfill Job        remote write    ├────────────────────────────────────┤
+  7h of 15 s points  ─────────────►   │  VictoriaMetrics  v1.154.0 single  │  each: 12 CPU / 24 GB,
+  1,338,330 series    same 10k-sample ├────────────────────────────────────┤  own m7gd.4xlarge node,
+  2.22B samples       requests to all │  OpenObserve      v1.1.0, parquet  │  local NVMe
+  ~80 min, then exits                 └────────────────────────────────────┘
 ```
 
-All four receive the same samples over `prometheusremotewrite`, with identical
-queue and retry settings, from a single scrape. Nothing is written twice and
-nothing is protocol-specific.
+All four receive the same Prometheus remote-write requests (protobuf + snappy)
+from one process. Nothing is written twice, nothing is protocol-specific, and
+the dataset is reproducible byte for byte: same seed and flags, same samples.
 
-## Results this reproduces
+## Results
 
-Measured numbers are in [RESULTS.md](RESULTS.md). The headline is the query
-that scans everything — `histogram_quantile` over all 1,085,760 bucket series,
-6-hour window, median of the recorded runs:
+Measured numbers are in [RESULTS.md](RESULTS.md).
+
+**The latest round (2026-10-15)** put Prometheus, Mimir, VictoriaMetrics and
+OpenObserve `v1.1.0` on one backfilled dataset — 1,338,330 series, 2.22B
+samples — at 12 CPU / 24 GB each. The query that scans everything,
+`histogram_quantile` over all 1,179,360 bucket series with a 6-hour window:
 
 | System | Latency |
 | --- | --- |
-| Prometheus | 4m 28s |
-| Mimir | 3m 55s |
-| OpenObserve · Parquet | 46.9s |
-| **OpenObserve · Vortex** | **45.5s** |
+| Prometheus | 4 m 17 s |
+| Mimir | 71.3 s |
+| VictoriaMetrics | 8.80 s |
+| **OpenObserve** | **3.70 s** |
 
-At stock settings none of the three systems runs this query at all — they
-refuse it on protective defaults. The benchmark raises those limits uniformly
-so the engines decide the outcome instead. See
-[deploy/README.md](deploy/README.md#query-limits).
-
-**Filter to a single path and the ranking tightens.** Same window, same step,
-filtering on `/api/bar`:
-
-| System | Latency (ms) |
-| --- | --- |
-| Prometheus | 9,237 |
-| OpenObserve · Parquet | 8,336 |
-| Mimir | 7,955 |
-| **OpenObserve · Vortex** | **3,022** |
-
-Vortex wins by 3.1× over Prometheus and 2.8× over Parquet. A selective filter is
-what Vortex's layout exploits and what a full-scan columnar format does not —
-for dashboard-style filtered work the format choice is worth more than the
-engine choice.
-
-**Which path you filter on changes this table**, so it is worth stating.
-fake-webserver produces 54 paths in two classes: 50 generated
-(`/api/service-1`…`50`) at 25,740 bucket series each, and 4 fixed
-(`/api/foo`, `/api/bar`, `/api/baz`, `/api/boom`) at **51,480**. Doubling the
-matched series roughly doubles Prometheus (1.93×) and Mimir (1.80×) but moves
-Parquet by 2% — so on a generated path Parquet is the slowest of the four, and
-on a fixed one it edges past Prometheus. `PATH_FILTER` in `bench/config.sh`
-selects it; RESULTS uses `/api/bar`.
-
-And the result that is not about milliseconds. Run the same benchmark again with
-the memory limit halved to **14 GB**, and almost nothing changes — every cell
-lands within 8% — *except* that Prometheus is **OOMKilled** on the
-million-series unfiltered histogram at 3h and 6h. That one query peaks at
-18.7 GB RSS in Prometheus against 4.25 GB in Mimir; raising
-`--query.max-samples` so it can run at all and having it consume 20 GB are the
-same decision.
+OpenObserve is fastest in all 16 cells: geomean 0.31× VictoriaMetrics', 6.1% of
+Mimir's and 2.0% of Prometheus'. Vortex is left out of the published results:
+with the new metrics index it queries no faster than Parquet but takes more than
+twice the disk.
 
 ## What you need
 
-- A Kubernetes cluster with **four dedicated nodes** for the systems under test,
-  plus ordinary capacity for the load generator (24 pods × 64m/64Mi = 1.54 CPU
-  and 1.5GiB of requests) and the collector (1–4 CPU, up to 6Gi).
-  Uses `m7gd.2xlarge` (8 vCPU / 32GB / 474 GB NVMe, Graviton/arm64) on EKS.
-- Nodes with local NVMe instance store; `m7gd.2xlarge` gives 474 GB per node.
-  See [deploy/README.md](deploy/README.md#storage) — the data is **ephemeral**.
+- A Kubernetes cluster with **four dedicated nodes**, one per system under
+  test. This repo uses EKS with `m7gd.4xlarge` (16 vCPU / 64 GiB / 950 GB local
+  NVMe, Graviton/arm64). The backfill Job runs on VictoriaMetrics' node; the
+  benchmark runner runs on an ordinary node in the same AZ.
+- Nodes with a local NVMe instance store. See
+  [deploy/README.md](deploy/README.md#storage) — the data is **ephemeral**.
 - `kubectl`, `helm`, `curl`, `python3`.
-- **Time.** You need enough ingestion to cover the widest query window, at full
-  cardinality. Total ingestion *duration* beyond that does not affect query
-  latency — a 3h query only ever scans 3h of data — but series count does.
+- About two hours end to end: ~80 minutes of backfill (the slowest system sets
+  the pace), OpenObserve's compaction and each system's settling, then ~10
+  minutes of queries per size.
 
 ### Node setup
 
-Each system must have a node to itself — that is the whole point of the
-7 CPU / 28 GB Guaranteed-QoS pod sizing. Taint a four-node group so nothing else lands there:
+Each system must have a node to itself — that is the point of the 12 CPU /
+24 GB Guaranteed-QoS sizing. Taint the node group so nothing else lands there:
 
 ```bash
 kubectl taint nodes <node> perf=true:NoSchedule
 ```
 
-Then label each node with the system that will own it. Each system's data lives
-on its node's instance store, and `hostPath` is node-local, so every deployment
+Then label each node with the system that owns it. Each system's data lives on
+its node's instance store and `hostPath` is node-local, so every deployment
 selects on this label — **without it the pods stay `Pending`**, and a pod that
-moved to a different perf node would come up with an empty directory and look
-like it had lost all its data:
+moved to another perf node would come up empty:
 
 ```bash
 kubectl label node <node-1> perf-system=prometheus
 kubectl label node <node-2> perf-system=mimir
-kubectl label node <node-3> perf-system=o2-parquet
-kubectl label node <node-4> perf-system=o2-vortex
+kubectl label node <node-3> perf-system=victoriametrics
+kubectl label node <node-4> perf-system=o2-parquet
 ```
 
-Every system's pod spec carries the matching toleration. On EKS with `eksctl`:
+A replaced node comes back tainted but **unlabelled**; relabel before
+installing. On EKS with `eksctl`:
 
 ```yaml
 managedNodeGroups:
   - name: perf
-    instanceType: m7gd.2xlarge
+    instanceType: m7gd.4xlarge
     desiredCapacity: 4
     volumeSize: 100          # the OS disk; data lives on the instance store
     taints:
@@ -126,117 +94,102 @@ managedNodeGroups:
         effect: NoSchedule
 ```
 
-If your nodes are x86, remove the `kubernetes.io/arch: arm64` nodeSelector in
-`deploy/fake-webserver/deploy.yaml`. All images used here are multi-arch.
+For an existing managed node group, raise both the maximum and the desired
+size to 4 (`aws eks update-nodegroup-config ... --scaling-config
+minSize=0,maxSize=4,desiredSize=4`).
+
+All images are multi-arch. On x86 nodes nothing needs changing.
 
 ## Running it
 
 ```bash
-deploy/install-all.sh                                       # the four systems
+deploy/install-all.sh                  # NVMe + the four systems, then stops
 # confirm all four are healthy, then:
-INSTALL_LOAD=1 deploy/install-all.sh                        # start the load
+INSTALL_LOAD=1 deploy/install-all.sh   # the backfill
 ```
 
-Step 1 mounts each node's NVMe (and verifies it) and installs the four systems
-under test, then **stops before any load** so you can confirm they are healthy.
-Step 2 pauses for them to settle and starts the load generator, so all four see
-identical input from the first sample.
+Step 1 mounts each node's NVMe (and verifies it) and installs the four systems,
+then **stops before any load** so you can confirm they are healthy. Step 2
+pauses for them to settle and runs the backfill Job, which writes the whole
+dataset to every system and exits. OpenObserve takes it with compaction off and
+has it switched on afterwards — the steps, and what "settled" means for each
+system, are in [deploy/README.md](deploy/README.md#after-the-backfill).
 
-**The OTel collector is not installed by default**, because installing it
-replaces the release's values and would drop any pipeline the cluster's
-collector already has. Add `INSTALL_COLLECTOR=1` only if that collector exists
-solely for this benchmark; otherwise wire up an existing one by hand. See
-[deploy/README.md](deploy/README.md#the-collector-is-opt-in). Nothing reaches
-the four systems until a collector scrapes `perf-fakeserver`.
-
-Then wait. Come back after several hours and check that the four systems agree
-on how much data they hold — if they disagree, the latency comparison is void:
+Then check that all four agree on what they hold — if they disagree, they did
+not receive the same data and the latency comparison is void:
 
 ```bash
 bench/run-in-cluster.sh --script cardinality.sh
 ```
 
-When cardinality matches across all four, run the benchmark:
+When they agree, run the benchmark with the query range pinned to the end of
+the backfilled span (2026-09-28 10:00 UTC for the default dataset):
 
 ```bash
-bench/run-in-cluster.sh
+RUNS=5 END_TIME=1790589600 bench/run-in-cluster.sh
 ```
 
 This runs the measurement from a pod inside the cluster and copies the results
 back. Do not time queries through `port-forward.sh`: the API-server hop puts a
-1,656–2,862ms floor under every request. It is not a constant, so it does not
-just inflate the numbers — it destroys the ratios, and costs the fastest system
-the most. See
-[bench/README.md](bench/README.md#measure-from-inside-the-cluster) for the
-measured comparison.
+1–3 s floor under every request, which destroys the ratios. See
+[bench/README.md](bench/README.md#measure-from-inside-the-cluster).
 
-240 requests: 4 queries × 4 windows × 4 systems × (1 cold + 3 recorded runs),
-less the 3h and 6h unfiltered cells which are recorded once. Results land in
-`results/<timestamp>/` as `raw.csv`, `summary.md`, `run-metadata.txt` and
-`pod-state.txt` (container restarts, so an OOMKill is not filed as a network
-error).
+Each run is 4 queries × 4 windows × 4 systems, each cell one discarded cold
+request plus `RUNS` recorded ones (the unfiltered 3h and 6h cells are recorded
+once). Results land in `results/<timestamp>/` as `raw.csv`, `summary.md`,
+`run-metadata.txt` and `pod-state.txt` (container restarts, so an OOMKill is
+not filed as a network error).
 
-Resource usage is measured separately, during steady-state ingestion:
-
-```bash
-bench/resources.sh 12 300      # 12 snapshots, 5 minutes apart
-```
+**Run it twice and pool.** Recent rounds saw ~20 s slowdowns that hit every
+system at once and came from outside them; two back-to-back runs pooled into
+one median per cell absorb them: concatenate the recorded runs of both
+`raw.csv` files per cell and take the median. The 2026-10-15 round saw no such
+slowdown, and its two passes agreed within 25% on 79 of 80 cells.
 
 See [bench/README.md](bench/README.md) for the knobs and
 [deploy/README.md](deploy/README.md) for what each manifest does and why.
 
 ## What is deliberately configured, and why
 
-These are the choices that make the comparison fair — change them and you are
-running a different benchmark:
+These choices make the comparison fair — change one and you are running a
+different benchmark:
 
 | Setting | Value | Reason |
 | --- | --- | --- |
-| Pod resources | 7 CPU / 28 GB memory, requests == limits | Guaranteed QoS on a dedicated node: fixed CPU shares, memory never reclaimed |
+| Pod resources | 12 CPU / 24 GB, requests == limits | Guaranteed QoS on a dedicated node: fixed CPU, memory never reclaimed |
 | Disk | node-local NVMe per system | Same device class everywhere; removes disk speed as a variable |
-| Ingest protocol | `prometheusremotewrite` for all four | OTLP for OpenObserve and remote write for the others would compare different parsers |
-| Mimir write limits | `ingestion_rate` 20M, `max_global_series_per_user` 150M | So writes are never throttled by defaults |
-| Query limits and timeouts | Raised to match across all four — see [deploy/README.md](deploy/README.md#query-limits) | At defaults, Prometheus and Mimir *refuse* the million-series histogram instead of running it, which measures the limit rather than the engine. 600s timeout everywhere, matching OpenObserve's default |
-| OpenObserve caches | `ZO_RESULT_CACHE_ENABLED=false` | Matches "caches disabled" on the others |
-| OpenObserve pushdown | `ZO_FEATURE_PUSHDOWN_FILTER_ENABLED=false` | On by default, but ~20% *slower* in these metrics tests. Affects parquet only; set identically in both so the A/B stays clean |
-| Parquet vs Vortex | `ZO_FILE_FORMAT` | The **only** difference between the two OpenObserve deployments |
+| Ingest | Prometheus remote write for all four, from one process | Identical input, one wire format |
+| Timestamps | exact `start + k × 15s` | The samples compress the same way on every system; a live scrape jitters |
+| Out-of-order window | 2h on Prometheus and Mimir | The backfill's concurrent senders reorder neighbouring steps; the others accept that by default |
+| Mimir write limits | `ingestion_rate` 20M, `max_global_series_per_user` 150M | Writes are never throttled by defaults |
+| Query limits and timeouts | Raised to match across all four — see [deploy/README.md](deploy/README.md#query-limits) | At defaults several systems *refuse* the million-series histogram, which measures the limit rather than the engine. 600 s timeout everywhere |
+| Result caches | VictoriaMetrics `-search.disableCache`, OpenObserve `ZO_RESULT_CACHE_ENABLED=false`; Prometheus and Mimir have none configured | Warm runs must re-execute the query |
+| OpenObserve pushdown | `ZO_FEATURE_PUSHDOWN_FILTER_ENABLED=false` | ~20% *slower* in these tests when on |
+| OpenObserve compaction | off during the backfill, on after; `ZO_FILE_MERGE_THREAD_NUM=1` | Merging an hour while it is still being written leaves late files unmerged. Turning it on then queues ~290 files per hour at once, and the default 6 merge workers OOM at 24 GB; one worker peaks at ~5 GiB. See [deploy/README.md](deploy/README.md#after-the-backfill) |
+| Mimir background timing | compaction, sync and deletion delays cut to minutes; `retention_period: 15m` | Settles ~30 minutes after the backfill with one copy of the data, read from object storage like the others read their disk |
+| OpenObserve file format | `ZO_FILE_FORMAT=parquet` | Vortex queries no faster with the metrics index and takes more than twice the disk, so it was dropped |
 
-`diff deploy/openobserve-parquet/values.yaml deploy/openobserve-vortex/values.yaml`
-should print three lines, one of them `ZO_FILE_FORMAT`. If it prints more, the
-A/B is contaminated.
-
-## Known gaps between this repo and the published run
+## Known gaps
 
 Stated plainly, because a reproduction you cannot audit is not a reproduction:
 
-- **The original article did not record its `step`.** `query_range` needs a
-  resolution step and the article pins none, so its absolute latencies cannot be
-  compared directly with anyone else's. This repo computes one per window the
-  way Grafana does — `max(15s, range / 1000)` rounded up — and
-  [RESULTS.md](RESULTS.md#how-the-measurement-is-taken) publishes it. Step is the
-  single biggest lever on absolute latency here: on a fixed 3h window, widening
-  it from 36 to 720 points moved Prometheus 1.68s→3.92s. If you publish numbers,
-  publish your step.
-- **`ZO_METRICS_CACHE_ENABLED` is left at the chart default (`true`).** The
-  published run did not set it either, so this repo matches it. If you want a
-  strictly cache-free OpenObserve, set it to `false` — in **both** values files.
-- **Mimir was `grafana/mimir:latest`**, pulled in August 2026. Pin a concrete
-  tag if you need the comparison stable over time.
-- **Cardinality is set by the replica count**, so quote the number you actually
-  measure. Each fake-webserver pod contributes ~45,220 bucket series; the 24
-  replicas here measure ~1.09M, which is what the unfiltered histogram scans.
-  `bench/cardinality.sh` reports it — publish it alongside any latencies.
-- **The collector here is stripped** of the pipelines that shipped the
-  operator's own cluster telemetry to an internal OpenObserve. Those pipelines
-  were filtered to exclude `perf-fakeserver` and never touched the systems under
-  test, so removing them does not change the measured workload.
-- **Halving the memory to 14 GB barely moves query latency** — every cell lands
-  within 5% — but Prometheus is OOMKilled on the million-series unfiltered
-  histogram, which alone peaks at 18.7 GB RSS. Sizing decides what runs, not
-  how fast it runs.
-- **Disk settles at different times per system.** Mimir's compactor holds
-  superseded blocks for `deletion_delay: 12h`, so its volume reads high for
-  ~14 hours after the last write. Measuring early inflates it.
+- **State your `step`.** `query_range` needs one; this repo computes it per
+  window the way Grafana does, `max(15s, range / 1000)` rounded up, and
+  RESULTS.md publishes it. It is the biggest single lever on absolute latency.
+- **Mimir is `grafana/mimir:latest`.** Pin a concrete tag before a round you
+  want to be comparable later.
+- **Backfilled data lays out differently from live-scraped data.**
+  VictoriaMetrics has read ~35–40% slower on a backfilled store than on a
+  live-scraped one with the same series, so numbers from a scraped dataset are
+  not comparable with these.
+- **Disk settles at different times per system.** Mimir is configured to
+  drop superseded blocks and ingester copies within ~30 minutes of a backfill;
+  OpenObserve deletes merged inputs after
+  `ZO_COMPACT_DELETE_FILES_DELAY_MINUTES` (10 here). Prometheus keeps its last
+  ~3 hours in head chunks plus WAL by design. Measure storage from each
+  system's own accounting.
+- **`ZO_METRICS_CACHE_ENABLED` is left at the chart default.** Set it to
+  `false` in the OpenObserve values file for a strictly cache-free run.
 
 ## Repository layout
 
@@ -246,11 +199,10 @@ deploy/
   set-dataset.sh       Point all four at a named dataset on the instance store
   local-nvme/          DaemonSet that formats and mounts each node's NVMe
   prometheus/          Prometheus v3.6.0, remote-write receiver, scrapes nothing
-  mimir/               Mimir single-binary, filesystem blocks storage
-  openobserve-parquet/ OpenObserve standalone, ZO_FILE_FORMAT=parquet
-  openobserve-vortex/  OpenObserve standalone, ZO_FILE_FORMAT=vortex
-  fake-webserver/      The load generator, 24 replicas (~1.09M bucket series)
-  otel-collector/      The scrape + 4-way fan-out. The heart of the setup.
+  mimir/               Mimir single binary, filesystem blocks storage
+  victoriametrics/     VictoriaMetrics single node (Helm)
+  openobserve-parquet/ OpenObserve standalone, ZO_FILE_FORMAT=parquet (Helm)
+  fake-webserver/      The load: a v5 backfill Job writing to all four
 bench/
   config.sh            Endpoints, windows, step, runs — every knob
   queries.sh           The four PromQL expressions
@@ -261,11 +213,9 @@ bench/
   resources.sh         CPU / memory / disk per system
   drop-caches.sh       Force a cold query
   port-forward.sh      Local ports — for browsing a UI, never for timing
-  experiments/         One-off studies, not part of the published benchmark
-results/               Your runs land here
+  experiments/         One-off studies, not part of the benchmark
+results/               Your runs land here (local only, not in git)
 RESULTS.md             Measured results
-RESULTS.html           The same, as a standalone page
-RESULTS.zh.html        Chinese translation
 ```
 
 ## License

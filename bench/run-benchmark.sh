@@ -12,7 +12,7 @@
 # Usage:
 #   ./run-benchmark.sh
 #   END_TIME=2026-08-06T03:00:00+08:00 ./run-benchmark.sh
-#   SYSTEMS_FILTER=o2-vortex QUERY_FILTER=histogram-regex ./run-benchmark.sh
+#   SYSTEMS_FILTER=o2-parquet QUERY_FILTER=histogram-regex ./run-benchmark.sh
 set -uo pipefail
 
 cd "$(dirname "$0")"
@@ -47,11 +47,16 @@ step            ${STEP:-per-window (Grafana rule: max(${MIN_INTERVAL}s, range/${
 runs            ${RUNS}
 warmup          ${WARMUP} (unrecorded requests per cell before the recorded runs)
 path_filter     ${PATH_FILTER}
-prometheus      ${PROM_BASE}
-mimir           ${MIMIR_BASE}
-o2_parquet      ${O2_PARQUET_BASE}
-o2_vortex       ${O2_VORTEX_BASE}
 EOF
+
+# The endpoints come from SYSTEMS rather than a hardcoded list, so a run that
+# measured fewer systems cannot record more -- an old block named Prometheus
+# and Mimir whether or not they were in SYSTEMS, and printed their unused
+# localhost defaults as if they had been measured.
+for entry in "${SYSTEMS[@]}"; do
+  IFS='|' read -r sys base _ <<< "${entry}"
+  printf '%-15s %s\n' "${sys}" "${base}" >> "${OUTDIR}/run-metadata.txt"
+done
 
 echo "==> end of range: ${END_TS} ($(python3 -c "import datetime,sys;print(datetime.datetime.fromtimestamp(int(sys.argv[1])).isoformat())" "${END_TS}") local)"
 echo "==> step=${STEP:-per-window} runs=${RUNS} path=${PATH_FILTER}"

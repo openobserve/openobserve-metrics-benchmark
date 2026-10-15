@@ -1,0 +1,52 @@
+# The load: writes the dataset to all four systems and exits. Run it via install.sh.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: perf-fakeserver
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: backfill
+  namespace: perf-fakeserver
+spec:
+  # A retry would resend every sample.
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: {app: fake-webserver-backfill}
+      annotations:
+        karpenter.sh/do-not-disrupt: "true"
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        perf-system: victoriametrics
+      tolerations:
+        - {key: perf, operator: Equal, value: "true", effect: NoSchedule}
+      containers:
+        - name: backfill
+          image: openobserve/fake-webserver:v5
+          env:
+            - {name: POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
+            - {name: POD_NAME, valueFrom: {fieldRef: {fieldPath: metadata.name}}}
+            - {name: NODE_NAME, valueFrom: {fieldRef: {fieldPath: spec.nodeName}}}
+          args:
+            - -num-nodes=14
+            - -node-name=fake-webserver
+            - -backfill-start=2026-09-28T03:00:00Z
+            - -backfill-step=15s
+            - -backfill-hours=7
+            - -backfill-seed=1
+            - -backfill-labels=job=fake-webserver,instance=$(POD_IP):8080,app=fake-webserver,pod_template_hash=5d4b8c7f9d,namespace=perf-fakeserver,pod=$(POD_NAME),node=$(NODE_NAME)
+            - -backfill-encoders=4
+            - -backfill-senders=4
+            - -backfill-progress=30s
+            - -remote-write=http://perf-prometheus-standalone.perf-prometheus.svc.cluster.local:9090/api/v1/write
+            - -remote-write=http://perf-mimir-standalone.perf-mimir.svc.cluster.local:9009/api/v1/push
+            - -remote-write=http://vms-victoria-metrics-single-server.perf-vm.svc.cluster.local:8428/api/v1/write
+            - -remote-write=http://root%40example.com:Complexpass%23123@o2-openobserve-standalone.perf-o2-parquet.svc.cluster.local:5080/api/default/prometheus/api/v1/write
+          resources:
+            # Shares VictoriaMetrics' node beside a Guaranteed 12 CPU; the limit uses what is idle.
+            requests: {cpu: "2", memory: 4Gi}
+            limits: {cpu: "6", memory: 8Gi}

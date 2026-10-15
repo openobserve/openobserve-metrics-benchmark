@@ -1,0 +1,37 @@
+# VictoriaMetrics single node. Only non-default chart values.
+server:
+  extraArgs:
+    httpListenAddr: ":8428"
+    storageDataPath: /nvme
+    search.disableCache: true
+    search.logSlowQueryDuration: 2s
+    search.maxSamplesPerQuery: "2147000000"
+    search.maxQueryDuration: 600s
+    search.maxUniqueTimeseries: "5000000"
+  persistentVolume:
+    enabled: false
+  extraVolumes:
+    - name: nvme
+      hostPath:
+        path: /mnt/k8s-disks/0/run-a/victoriametrics
+        type: DirectoryOrCreate
+  extraVolumeMounts:
+    - name: nvme
+      mountPath: /nvme
+  service:
+    servicePort: 8428
+    targetPort: http
+  resources:
+    limits:
+      cpu: 12
+      memory: 24G
+    requests:
+      cpu: 12
+      memory: 24G
+  nodeSelector:
+    perf-system: victoriametrics
+  tolerations:
+    - key: perf
+      operator: Equal
+      value: "true"
+      effect: NoSchedule

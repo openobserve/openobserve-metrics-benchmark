@@ -1,99 +1,164 @@
 # deploy/
 
 ```bash
-./install-all.sh                                     # 1 · NVMe + the four systems
-INSTALL_LOAD=1 ./install-all.sh                      # 2 · + the load
-INSTALL_LOAD=1 INSTALL_COLLECTOR=1 ./install-all.sh  # 3 · + the collector
+./install-all.sh                  # 1 · NVMe + the four systems
+INSTALL_LOAD=1 ./install-all.sh   # 2 · + the backfill
 ```
 
 Each step is a no-op if already done, so re-running with the next flag is safe.
 
-**Step 1 stops before any load.** That is the point: once `fake-webserver` is
-up every system is being written to and the run has started, so it is worth
-confirming all four are healthy first. `install-all.sh` prints what to check.
+**Step 1 stops before any load.** The backfill writes the whole dataset to every
+system in one go, so confirm all four are healthy first; `install-all.sh` prints
+what to check. OpenObserve must be running with `ZO_COMPACT_ENABLED=false` for
+the backfill (it is, in the values files as committed for a backfill round).
 
 **`local-nvme` always runs first** — a system that starts before the mount
 exists writes to the root EBS volume while appearing to use NVMe, and nothing
 surfaces the mistake. See [Storage](#storage).
 
 **Ready is not steady.** WAL replay, block loading and the first compaction all
-happen after the readiness probe passes, and load applied during that window
-hits each system in a different state — the comparison is only clean if all
-four see identical input from the first sample. `STABILIZE_SECS` (default 120)
-is the pause before the load starts.
+happen after the readiness probe passes. `STABILIZE_SECS` (default 120) is the
+pause before the load starts.
 
-## The collector is opt-in
+## The systems under test
 
-`install-all.sh` deliberately does **not** install `otel-collector/`. That
-script runs `helm upgrade --install -f collector-values.yaml`, which replaces
-the release's values wholesale — and this repo's values file is the stripped,
-benchmark-only version. On a cluster whose collector also carries other
-telemetry, running it silently deletes those pipelines.
+| Directory | Namespace | Pod | Service | Query API base | Write endpoint |
+| --- | --- | --- | --- | --- | --- |
+| `prometheus/` | `perf-prometheus` | `prometheus-standalone-0` | `perf-prometheus-standalone:9090` | `/` | `/api/v1/write` |
+| `mimir/` | `perf-mimir` | `mimir-standalone-0` | `perf-mimir-standalone:9009` | `/prometheus` | `/api/v1/push` |
+| `victoriametrics/` | `perf-vm` | `vms-victoria-metrics-single-server-0` | `vms-victoria-metrics-single-server:8428` | `/` | `/api/v1/write` |
+| `openobserve-parquet/` | `perf-o2-parquet` | `o2-openobserve-standalone-0` | `o2-openobserve-standalone:5080` | `/api/default/prometheus` | `/api/default/prometheus/api/v1/write` |
 
-If the collector exists solely for this benchmark:
-
-```bash
-INSTALL_COLLECTOR=1 ./install-all.sh
-```
-
-If it is shared, edit the live values instead and add only what the benchmark
-needs — the four `prometheusremotewrite` exporters and the single
-`metrics/perf_fakeserver` pipeline from `otel-collector/collector-values.yaml`:
-
-```bash
-helm -n openobserve-collector get values o2c > /tmp/o2c.yaml
-# merge in the four exporters + the pipeline
-helm -n openobserve-collector upgrade o2c openobserve/openobserve-collector -f /tmp/o2c.yaml
-```
-
-Nothing reaches the four systems until some collector scrapes
-`perf-fakeserver` and writes to them.
-
-## The four systems under test
-
-| Directory | Namespace | Service | Query API path |
-| --- | --- | --- | --- |
-| `prometheus/` | `perf-prometheus` | `perf-prometheus-standalone:9090` | `/api/v1/query_range` |
-| `mimir/` | `perf-mimir` | `perf-mimir-standalone:9009` | `/prometheus/api/v1/query_range` |
-| `openobserve-parquet/` | `perf-o2-parquet` | `o2-openobserve-standalone:5080` | `/api/default/prometheus/api/v1/query_range` |
-| `openobserve-vortex/` | `perf-o2-vortex` | `o2-openobserve-standalone:5080` | `/api/default/prometheus/api/v1/query_range` |
-
-The three path prefixes are why `bench/config.sh` stores a *base URL* per system
-rather than a hostname.
+Each is pinned by `nodeSelector: perf-system=<prometheus|mimir|victoriametrics|o2-parquet>`
+and tolerates `perf=true:NoSchedule`. The differing path prefixes are why
+`bench/config.sh` stores a *base URL* per system rather than a hostname. The
+names are load-bearing: the backfill Job and `bench/run-in-cluster.sh` address
+these Services, so keep the Helm release names `vms` (VictoriaMetrics) and `o2`
+(OpenObserve).
 
 ## Sizing
 
-**7 CPU / 28G, requests == limits** (Guaranteed QoS) on a dedicated
-`m7gd.2xlarge` tainted `perf=true:NoSchedule`, writing to that node's
-**instance-store NVMe** — identical for all four. See [Storage](#storage).
+**12 CPU / 24G, requests == limits** (Guaranteed QoS) on a dedicated
+`m7gd.4xlarge` (16 vCPU / 64 GiB, ~15.9 allocatable) tainted
+`perf=true:NoSchedule`, writing to that node's **instance-store NVMe** —
+identical for every system. Do not go above 12: the backfill Job shares
+VictoriaMetrics' node and needs its one requested CPU.
 
-`28G` is decimal (26.08 GiB). Do not "correct" it to `28Gi`: that exceeds the
-node's 29.79 GiB allocatable and the pod sits `Pending`.
-
-28G rather than 14G because every dataset must fit in page cache. At 14G,
-OpenObserve's 15.5GB did not and Prometheus's 4.5GB did, which flattered
-Prometheus for reasons unrelated to its engine. Shrink these and check the
-largest dataset still fits.
-
-The Helm release name for both OpenObserve deployments must stay `o2` — it is
-what produces the Service name `o2-openobserve-standalone` that the collector's
-exporters address.
+`24G` is decimal (22.35 GiB); keep the decimal unit. It leaves each node ~35 GiB for page cache, more than any dataset here
+needs, and it is the ceiling a query may use: Prometheus has peaked at 18.7 GB
+on the unfiltered 6h histogram, and been OOMKilled at 14 GB.
 
 ## Notes per component
 
-**`prometheus/`** — runs with `--web.enable-remote-write-receiver` and an empty
-`scrape_configs`. It never scrapes anything itself; all load arrives by remote
-write.
+**`prometheus/`** — Prometheus v3.6.0 with `--web.enable-remote-write-receiver`
+and an empty `scrape_configs`: all data arrives by remote write.
+`storage.tsdb.out_of_order_time_window: 2h` lets it accept the backfill's
+slightly reordered steps (four concurrent senders); without it the first
+out-of-order sample is a 400 and the backfill aborts.
 
 **`mimir/`** — single-binary mode on filesystem blocks storage, replication
-factor 1. Write-path limits are raised far above the workload so nothing is
-throttled. Query-path limits: see below.
+factor 1, multitenancy off. Write limits are raised far above the workload.
+For the backfill: `limits.out_of_order_time_window: 2h` (same reason as
+Prometheus) and `limits.query_ingesters_within: 0`, so queries always include
+the ingesters — by default data older than 13h is read only from the
+store-gateway, and backfilled data is a day old while its last hours can still
+be in the ingester head. The image is `grafana/mimir:latest`; pin a tag before a
+round you want comparable later.
+
+**`victoriametrics/`** — `victoria-metrics-single` chart, release `vms`.
+`-search.disableCache` is on, so it never answers from a result cache.
+`retentionPeriod: 1` (month): **samples older than that are silently dropped**
+(counted in `vm_too_small_timestamp_rows_ignored_total`, not refused), so a
+backfill's start must be within the last month. The default dataset,
+2026-09-28, stops fitting around 2026-10-28 — pass a newer `BACKFILL_START`, or
+raise the retention, and check `vm_rows_added_to_storage_total` afterwards.
+
+**`openobserve-parquet/`** — `openobserve-standalone` chart, release `o2`,
+`ZO_FILE_FORMAT=parquet`. A Vortex deployment was dropped: with the metrics
+index it queries no faster and takes more than twice the disk. Confirm what
+reached the process before every round — the chart's ConfigMap carries its own
+defaults, and it is the explicit `env` that wins:
+
+```bash
+kubectl -n perf-o2-parquet exec o2-openobserve-standalone-0 -- \
+  sh -c 'tr "\0" "\n" </proc/1/environ | grep -E "ZO_FILE_FORMAT|ZO_COMPACT|ZO_METRICS|ZO_FILE_MERGE" | sort'
+```
+
+The values files carry `ZO_COMPACT_ENABLED` and `ZO_MAX_FILE_RETENTION_TIME=60`
+for the backfill procedure below; `ZO_RESULT_CACHE_ENABLED=false` and
+`ZO_FEATURE_PUSHDOWN_FILTER_ENABLED=false` for the comparison.
+
+## The load: fake-webserver v5 backfill
+
+**`fake-webserver/`** — one Job, `openobserve/fake-webserver:v5` in backfill
+mode. It simulates `-num-nodes=14` on a virtual clock and writes every point
+at exactly `start + k × step` to all four systems by Prometheus remote write
+(protobuf + snappy, 10k samples per request, 429/5xx retried, any other 4xx
+aborts, the slowest target sets the pace), then exits. The defaults are the
+published dataset:
+
+| | |
+| --- | --- |
+| span | 2026-09-28 03:00:00Z + 7h (the 6h window plus 1h lookback), 15 s step, seed 1 |
+| samples | 2,218,011,632, byte-identical on every run with the same flags |
+| series | 1,338,330 — 1,179,360 `..._bucket`, 45,360 each `_sum`/`_count`/`requests_total` |
+| wall time | 1 h 20 min at ~464k samples/s to each system (2026-10-15, five targets then), 0 retries |
+
+```bash
+./fake-webserver/install.sh                                   # the default dataset
+BACKFILL_START=2026-10-20T00:00:00Z ./fake-webserver/install.sh   # any other start
+BACKFILL_HOURS=1 ./fake-webserver/install.sh                  # a smoke test
+```
+
+`install.sh` refuses to run while `job/backfill` exists (a second run
+duplicates every sample), follows the progress lines, and fails loudly if the
+Job did not complete. `-backfill-labels` adds the target labels a scrape would
+(`job`, `instance`, `pod`, `node`, …) so the series set matches the scraped
+rounds.
+
+The Job runs on VictoriaMetrics' node. It requests 1 CPU (all that is left
+beside a Guaranteed 12) and may use up to 6 of whatever is idle; it is gone
+before any query runs.
+
+### After the backfill
+
+Every system must hold every sample, and have finished its own post-ingest
+work, before a query is timed:
+
+| System | Holds everything when | Settled when |
+| --- | --- | --- |
+| OpenObserve (both) | `SELECT SUM(records) FROM file_list WHERE deleted=0` equals the generated count — ~3 min after the Job with `ZO_MAX_FILE_RETENTION_TIME=60` | compaction switched on and finished: `file_list_deleted` empty, as many `.midx` files as data files, no `compaction::merge` log line for 10 min — twice in a row |
+| VictoriaMetrics | `vm_rows_added_to_storage_total` equals the generated count | `vm_active_merges` 0 |
+| Prometheus | `prometheus_tsdb_head_samples_appended_total` equals the generated count | no head compaction for 10 min (`prometheus_tsdb_compactions_total` unchanged) |
+| Mimir | `cortex_ingester_ingested_samples_total` equals the generated count | `cortex_ingester_memory_series` 0 (head idle-compacted and shipped), a compactor run after that, and a store-gateway sync after the run — ~30 min with this config |
+
+
+OpenObserve takes one extra step, in this order:
+
+1. **Backfill with compaction off.** Merging an hour while samples for it are
+   still arriving marks the hour done; files that land in it afterwards stay
+   unmerged, without `.midx`, until the hourly old-data sweep.
+2. **Wait for the flush** (the first column above).
+3. **Switch compaction on:** `ZO_COMPACT_ENABLED=true` in the values file,
+   re-run its `install.sh`. Merging starts within a minute and each hour is
+   merged once, whole. Keep `ZO_FILE_MERGE_THREAD_NUM=1`: the backlog is ~290
+   files per hour, and the default 6 workers OOM at 24 GB.
+4. **Wait for settled** (the second column).
+
+A changed `ZO_COMPACT_MAX_FILE_SIZE` on already-merged data does nothing by
+itself, and `./openobserve reset -c file-list-jobs` on a running compactor is
+silently undone — the server keeps offsets in memory and writes them back. To
+re-merge: `ZO_COMPACT_ENABLED=false` and re-run `install.sh`; run the reset in
+each O2 pod (cwd `/`); `true` and re-run `install.sh`.
+
+Then `bench/run-in-cluster.sh --script cardinality.sh` — all four must report
+the same series counts.
 
 ## Query limits
 
-At their defaults, Prometheus and Mimir *refused* the million-series unfiltered
-histogram rather than running it — which measures the limit, not the engine.
-All four now get the same allowances:
+At their defaults the systems *refuse* the million-series unfiltered histogram
+rather than running it — which measures the limit, not the engine. All four get
+the same allowances:
 
 | System | Setting | Value | Default |
 | --- | --- | --- | --- |
@@ -102,190 +167,107 @@ All four now get the same allowances:
 | Mimir | `limits.max_fetched_chunks_per_query` | 20e6 | 2e6 |
 | Mimir | `querier.timeout` | 600s | 2m |
 | Mimir | `server.http_server_write_timeout` | 600s | 2m |
+| VictoriaMetrics | `-search.maxSamplesPerQuery` | 2.147e9 | 1e9 |
+| VictoriaMetrics | `-search.maxUniqueTimeseries` | 5e6 | derived from memory |
+| VictoriaMetrics | `-search.maxQueryDuration` | 600s | 30s |
 | OpenObserve | `ZO_METRICS_MAX_SERIES_RESPONSE` | 40000 | lower |
 | OpenObserve | `ZO_METRICS_MAX_POINTS_PER_SERIES` | 10000000 | lower |
 | OpenObserve | query timeout | 600s | 600s (unchanged) |
 
-**All three needed raising, not just the two TSDBs.** OpenObserve's stock
-metrics limits would have rejected the million-series histogram before its
-engine ran, exactly as Prometheus's and Mimir's did. 600s is OpenObserve's
-default timeout, so it is the number the other two were matched to — that one
-is the only value here that was not changed.
+600s is OpenObserve's default timeout, so it is the number every other system
+was matched to.
 
-Two Mimir gotchas:
-
-- **Both timeouts are required.** `http_server_write_timeout` also defaults to
-  2m and fires first, closing the connection before Mimir can write its timeout
-  response — the client sees a bare TCP close (`curl` reports `000`), not a
-  readable error.
-- `querier.timeout` belongs to the **top-level `querier` block**. Under `limits`
-  it fails at startup: `field querier_timeout not found in type
-  validation.plainLimits`.
-
-**`openobserve-parquet/` and `openobserve-vortex/`** — identical apart from
-`ZO_FILE_FORMAT`. Verify before every run:
-
-```bash
-diff openobserve-parquet/values.yaml openobserve-vortex/values.yaml
-```
-
-Three lines should differ, one being `ZO_FILE_FORMAT`. Then confirm it reached
-the container:
-
-```bash
-kubectl -n perf-o2-parquet exec sts/o2-openobserve-standalone -- printenv ZO_FILE_FORMAT
-kubectl -n perf-o2-vortex  exec sts/o2-openobserve-standalone -- printenv ZO_FILE_FORMAT
-```
-
-This matters: the chart's ConfigMap also carries a `ZO_FILE_FORMAT` default, and
-it is the pod's explicit `env` (from `extraEnv`) that overrides it. Reading the
-ConfigMap alone will mislead you.
-
-**`fake-webserver/`** — 24 replicas, no flags, so image defaults apply: 54
-distinct `path` values, 5 regions, 3 versions, 2 methods, and a histogram with
-25 explicit buckets plus `+Inf`. That last detail is why
-`codelab_api_request_duration_seconds_bucket` has exactly 26× the series of
-`..._count`.
-
-Every pod is scraped as its own target and stamped with a `pod` label, so series
-count scales linearly with `replicas`: measured at ~45,220 bucket and ~1,739
-`_count` series per pod. **24 replicas** therefore gives ~1,085,280 bucket series
-and ~1.22M total active — the point at which the unfiltered histogram scans more
-than a million series. (The same cluster at 20 replicas measured 904,410 bucket /
-1,013,150 total active.) Change `replicas` for any other scale and re-run
-`bench/cardinality.sh` afterwards.
-
-**`otel-collector/`** — the load path, and the file worth reading before
-anything else. One `prometheus/perf-fakeserver` receiver scrapes the 24 pods
-every 15s; one pipeline fans the result out to all four exporters. The chart's
-own default pipelines are removed with explicit `null`s; confirm they really
-went away:
-
-```bash
-kubectl -n openobserve-collector get otelcol -o yaml | grep -A 12 'pipelines:'
-```
-
-Each collector should show exactly one pipeline, `metrics/perf_fakeserver`.
-
-`install.sh` also installs cert-manager and the OpenTelemetry Operator if the
-cluster does not already have them — the chart renders `OpenTelemetryCollector`
-custom resources, so the operator has to exist first.
+- **VictoriaMetrics:** `-search.maxSamplesPerQuery` is the one that binds — the
+  6h unfiltered histogram scans ~1.18M series × 1,441 samples ≈ 1.7e9 raw
+  samples. 2.147e9 is the largest value the flag accepts.
+  `-search.maxSeriesPerAggrFunc` does not need raising: it bounds the series the
+  aggregate *generates* (26 × 54 groups), not the ones it reads.
+- **Mimir needs both timeouts.** `http_server_write_timeout` also defaults to 2m
+  and fires first, closing the connection before Mimir can write its timeout
+  response — the client sees a bare TCP close (`curl` reports `000`).
+  `querier.timeout` belongs to the top-level `querier` block; under `limits` it
+  fails at startup.
+- **Prometheus memory:** raising `--query.max-samples` so the unfiltered
+  histogram can run is also deciding that it may use ~19 GB for it (18.7 GB
+  RSS has been measured, and an OOMKill at a 14 GB limit).
 
 ## Storage
 
 Each system writes to its node's **instance-store NVMe** via a `hostPath` at
-`/mnt/k8s-disks/0/<system>`, so disk speed is not a variable in the comparison.
-There are no PVCs.
+`/mnt/k8s-disks/0/<dataset>/<system>`, so disk speed is not a variable. There
+are no PVCs.
 
 **The data is ephemeral.** Instance store is lost whenever the node stops, is
-replaced, or is reclaimed. A dataset that took hours to ingest disappears with
-the node. Use on-demand capacity and keep the perf nodes undisrupted.
+replaced, or is scaled away. A backfill is cheap to redo, but a node that goes
+away mid-round takes that system's dataset with it.
+
+The default dataset settles at roughly 1.1 GB on VictoriaMetrics, 2.2 GB on
+OpenObserve and 5.9 GB on Prometheus (RESULTS.md,
+2026-10-15). The ~885 GB instance store holds many.
 
 ### The mount
 
 `local-nvme/mount-nvme.yaml` is a DaemonSet that formats the instance-store
 device as xfs and mounts it at `/mnt/k8s-disks/0`. It is idempotent — an
 existing mount or filesystem is left alone — and it re-runs when a node is
-replaced.
-
-It exists because the EKS AL2023 nodeadm setting that is supposed to do this,
-
-```yaml
-apiVersion: node.eks.aws/v1alpha1
-kind: NodeConfig
-spec:
-  instance:
-    localStorage:
-      strategy: RAID0
-```
-
-did not take effect on these nodes: `/dev/nvme1n1` was present but had no
-filesystem and was not mounted. If it works for you, the DaemonSet finds the
-mount already in place and does nothing.
+replaced. It exists because the EKS AL2023 nodeadm `localStorage: RAID0`
+setting did not take effect on these nodes; if it works for you, the DaemonSet
+finds the mount in place and does nothing.
 
 ### Datasets
 
-The data path carries a dataset name:
-
-```
-/mnt/k8s-disks/0/<dataset>/<system>
-```
-
-Change that one component in all four files and re-apply, and the systems come
-up empty and start a fresh dataset — while the previous one stays on disk,
-untouched. Switching the name back re-attaches the old data, so a finished run
-can be re-queried later without re-ingesting it.
+The data path carries a dataset name, `/mnt/k8s-disks/0/<dataset>/<system>`.
+Change it in every file and re-apply, and the systems come up empty on a fresh
+dataset while the previous one stays on disk; switching back re-attaches it.
 
 ```bash
 ./set-dataset.sh          # show the current name
 ./set-dataset.sh run-b    # switch all four, then ./install-all.sh
 ```
 
-Each system is pinned to one node by a `perf-system` node label, because
-`hostPath` is node-local: a pod that restarts onto a different perf node finds
-an empty directory and comes up with no data. Label the nodes once, one system
-each, before the first install:
-
-```bash
-kubectl label node <node> perf-system=prometheus    # mimir, o2-parquet, o2-vortex
-```
+**Every file must use the same name.** A mismatch is silent — one system
+quietly starts empty — and the cardinality check is the only thing that would
+catch it.
 
 What is on the nodes right now:
 
 ```bash
-kubectl -n kube-system exec ds/mount-nvme -- \
-  nsenter -t 1 -m -- du -sh /mnt/k8s-disks/0/*/*
+for p in $(kubectl -n kube-system get pods -l app=mount-nvme -o name); do
+  kubectl -n kube-system exec "$p" -- nsenter -t 1 -m -- du -sh /mnt/k8s-disks/0/*/*
+done
 ```
-
-Each dataset costs roughly 3 GB per hour of ingestion per system at 24
-fake-webserver replicas, so several fit in the 474 GB instance store. They are
-still ephemeral: a node replacement takes every dataset on it.
-
-**All four files must use the same name.** A mismatch is silent — one system
-quietly starts empty while the others carry on, and the cardinality check is
-the only thing that would catch it.
 
 ### Why the ordering matters
 
 **Apply the DaemonSet before the systems under test.** A pod that starts first
 binds its `hostPath` to the directory that exists at that moment and keeps that
-view after the device is mounted underneath — it will happily write to the
-100 GB root EBS volume for the whole run. Nothing surfaces the mistake: the
-benchmark completes and reports numbers for the wrong disk. `install-all.sh`
-enforces the ordering and refuses to continue if any node's
-`/mnt/k8s-disks/0` is not backed by `/dev/nvme*`.
-
-Check it any time, during ingestion especially — `Used` should be climbing:
-
-```bash
-kubectl -n kube-system exec ds/mount-nvme -- \
-  nsenter -t 1 -m -- df -h /mnt/k8s-disks/0
-```
+view after the device is mounted underneath — it writes to the root EBS volume
+for the whole run and nothing surfaces it. `install-all.sh` enforces the order
+and refuses to continue if any node's `/mnt/k8s-disks/0` is not `/dev/nvme*`.
 
 ### Using EBS instead
 
-To go back to network storage, replace each `hostPath` volume with a
-`volumeClaimTemplates` entry (Prometheus and Mimir) and set
-`persistence.enabled: true` with a `storageClass` in the two OpenObserve values
-files. Note that gp3's default profile is 3000 IOPS / 125 MB/s regardless of
-volume size, and that `volumeClaimTemplates` is immutable — changing a size or
-class later means deleting the StatefulSet **and** its PVC.
+Replace each `hostPath` with a `volumeClaimTemplates` entry (Prometheus, Mimir)
+or `persistence.enabled: true` with a `storageClass` (VictoriaMetrics and the
+OpenObserve values files). gp3's default is 3000 IOPS / 125 MB/s regardless of
+size, and `volumeClaimTemplates` is immutable.
 
 ## Teardown
 
 ```bash
-kubectl delete ns perf-prometheus perf-mimir perf-o2-parquet perf-o2-vortex perf-fakeserver
-helm -n openobserve-collector uninstall o2c
+kubectl delete ns perf-prometheus perf-mimir perf-vm perf-o2-parquet perf-fakeserver
 kubectl delete -f local-nvme/mount-nvme.yaml
 ```
 
-There are no PVs or PVCs to clean up. The data sits on the nodes' instance
-store and goes away with them, but it is **not** removed by deleting the
-namespaces — the directories under `/mnt/k8s-disks/0` survive. A fresh run on
-the same nodes therefore starts on top of the previous run's files. Clear them
-first:
+Between rounds, scaling the StatefulSets to 0 is usually enough. Deleting the
+namespaces does **not** remove the data under `/mnt/k8s-disks/0` — a fresh
+round on the same nodes starts on top of it. Clear it on every node:
 
 ```bash
-kubectl -n kube-system exec ds/mount-nvme -- \
-  nsenter -t 1 -m -- sh -c 'rm -rf /mnt/k8s-disks/0/{prometheus,mimir,o2-parquet,o2-vortex}'
+for p in $(kubectl -n kube-system get pods -l app=mount-nvme -o name); do
+  kubectl -n kube-system exec "$p" -- nsenter -t 1 -m -- rm -rf /mnt/k8s-disks/0/<dataset>
+done
 ```
+
+Scaling the perf node group to zero discards every node's instance store, and
+with it every dataset.

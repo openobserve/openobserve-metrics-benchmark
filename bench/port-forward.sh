@@ -39,8 +39,8 @@ fwd() {
 echo "==> forwarding"
 fwd perf-prometheus  svc/perf-prometheus-standalone 19090 9090
 fwd perf-mimir       svc/perf-mimir-standalone      19009 9009
+fwd perf-vm          svc/vms-victoria-metrics-single-server 18428 8428
 fwd perf-o2-parquet  svc/o2-openobserve-standalone  15081 5080
-fwd perf-o2-vortex   svc/o2-openobserve-standalone  15082 5080
 
 sleep 3
 echo

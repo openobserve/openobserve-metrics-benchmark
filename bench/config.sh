@@ -16,25 +16,32 @@
 # If you reach the systems some other way (ingress, LoadBalancer, a host in the
 # same VPC), point these at those URLs instead -- everything else still works.
 #
-# Note the path prefixes: Prometheus serves the API at the root, Mimir under
-# /prometheus, OpenObserve under /api/{org}/prometheus.
+# Note the path prefixes: Prometheus and VictoriaMetrics serve the API at the
+# root, Mimir under /prometheus, OpenObserve under /api/{org}/prometheus.
 # -----------------------------------------------------------------------------
 : "${PROM_BASE:=http://localhost:19090}"
 : "${MIMIR_BASE:=http://localhost:19009/prometheus}"
+: "${VM_BASE:=http://localhost:18428}"
 : "${O2_PARQUET_BASE:=http://localhost:15081/api/default/prometheus}"
-: "${O2_VORTEX_BASE:=http://localhost:15082/api/default/prometheus}"
 
 # OpenObserve basic auth -- must match `auth:` in the two values.yaml files.
 : "${O2_USER:=root@example.com}"
 : "${O2_PASS:=Complexpass#123}"
 
-# The four systems under test, in report order. Format: label|base_url|auth
+# The systems under test, in report order. Format: label|base_url|auth
 # (auth is empty for the systems that need none).
+#
+# The two OpenObserve labels are NAMESPACE names, and what distinguishes the
+# two deployments has changed from round to round -- first ZO_FILE_FORMAT, then
+# the image. In this round both run the same dev build and ZO_FILE_FORMAT is
+# the A/B variable again, so the labels do describe what each one writes.
+# Do not assume that for an older results directory: summarize.py derives the
+# version from the run's own run-metadata.txt rather than trusting these names.
 SYSTEMS=(
   "prometheus|${PROM_BASE}|"
   "mimir|${MIMIR_BASE}|"
+  "vm|${VM_BASE}|"
   "o2-parquet|${O2_PARQUET_BASE}|${O2_USER}:${O2_PASS}"
-  "o2-vortex|${O2_VORTEX_BASE}|${O2_USER}:${O2_PASS}"
 )
 
 # -----------------------------------------------------------------------------

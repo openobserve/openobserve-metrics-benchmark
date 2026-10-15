@@ -19,16 +19,15 @@
 #   Prometheus      3445ms       1287ms
 #   Mimir           4181ms       1319ms
 #   O2/Parquet      2122ms        158ms
-#   O2/Vortex       1953ms        297ms
 #
 # A real 8.1x gap (Prometheus vs Parquet) reads as 1.6x through the tunnel. So
 # neither the absolutes NOR the ordering survive a port-forwarded run.
 #
 # What this script does instead
 #   1. starts a small pod on a node that is NOT under test -- it carries no
-#      `perf` toleration, so it cannot land on the four tainted benchmark nodes
+#      `perf` toleration, so it cannot land on the tainted benchmark nodes
 #      and steal CPU from the system it is measuring -- pinned to the same AZ
-#      as the systems under test so the hop is intra-AZ (~0.3ms) for all four;
+#      as the systems under test so the hop is intra-AZ (~0.3ms) for all of them;
 #   2. copies bench/ into it;
 #   3. runs run-benchmark.sh there, against in-cluster Service DNS;
 #   4. copies any results/<stamp>/ it produced back here, same layout as a
@@ -38,13 +37,13 @@
 #   ./run-in-cluster.sh
 #   RUNS=5 WINDOWS="1800 3600" ./run-in-cluster.sh
 #   END_TIME=2026-08-06T03:00:00+08:00 ./run-in-cluster.sh
-#   O2_PARQUET_NS=my-parquet-ns O2_VORTEX_NS=my-vortex-ns ./run-in-cluster.sh
+#   O2_PARQUET_NS=my-parquet-ns ./run-in-cluster.sh
 #
 #   ./run-in-cluster.sh --script cardinality.sh         # any bench/ script
 #   ./run-in-cluster.sh --script cardinality.sh paths   # ...with its own args
 #   ./run-in-cluster.sh --delete                        # tear the pod down
 #
-# --script only suits scripts that talk to the four systems over HTTP, i.e.
+# --script only suits scripts that talk to the systems under test over HTTP, i.e.
 # run-benchmark.sh and cardinality.sh. resources.sh and drop-caches.sh drive
 # kubectl instead, and the runner pod has neither the binary nor the RBAC --
 # run those from your workstation, where they never needed a port-forward.
@@ -58,11 +57,21 @@ cd "$(dirname "$0")"
 # -----------------------------------------------------------------------------
 # Where the systems under test live. Defaults match deploy/*/install.sh.
 # -----------------------------------------------------------------------------
-: "${PROM_NS:=perf-prometheus}";      : "${PROM_SVC:=perf-prometheus-standalone}";  : "${PROM_PORT:=9090}"
-: "${MIMIR_NS:=perf-mimir}";          : "${MIMIR_SVC:=perf-mimir-standalone}";      : "${MIMIR_PORT:=9009}"
+: "${PROM_NS:=perf-prometheus}";      : "${PROM_SVC:=perf-prometheus-standalone}";      : "${PROM_PORT:=9090}"
+: "${MIMIR_NS:=perf-mimir}";          : "${MIMIR_SVC:=perf-mimir-standalone}";           : "${MIMIR_PORT:=9009}"
+: "${VM_NS:=perf-vm}";                : "${VM_SVC:=vms-victoria-metrics-single-server}"; : "${VM_PORT:=8428}"
 : "${O2_PARQUET_NS:=perf-o2-parquet}"
-: "${O2_VORTEX_NS:=perf-o2-vortex}"
 : "${O2_SVC:=o2-openobserve-standalone}"; : "${O2_PORT:=5080}"
+
+# The systems under test, as `label|namespace|pod`. One list, so the AZ probe,
+# the restart check and the memory-limit metadata can never drift apart -- they
+# did when each carried its own copy.
+SUT=(
+  "prometheus|${PROM_NS}|prometheus-standalone-0"
+  "mimir|${MIMIR_NS}|mimir-standalone-0"
+  "vm|${VM_NS}|${VM_SVC}-0"
+  "o2-parquet|${O2_PARQUET_NS}|o2-openobserve-standalone-0"
+)
 
 # -----------------------------------------------------------------------------
 # The runner pod itself.
@@ -104,13 +113,10 @@ kexec_ok() {
 # surface as http_code 000. The benchmark itself runs in a pod with no kubectl
 # and no RBAC, so this has to happen out here.
 pod_states() {
-  local ns sts
-  for entry in "${PROM_NS}|prometheus-standalone-0" \
-               "${MIMIR_NS}|mimir-standalone-0" \
-               "${O2_PARQUET_NS}|o2-openobserve-standalone-0" \
-               "${O2_VORTEX_NS}|o2-openobserve-standalone-0"; do
-    IFS='|' read -r ns sts <<< "${entry}"
-    kubectl -n "${ns}" get pod "${sts}" -o jsonpath="${ns} restarts={.status.containerStatuses[0].restartCount} lastReason={.status.containerStatuses[0].lastState.terminated.reason} lastExit={.status.containerStatuses[0].lastState.terminated.exitCode} finishedAt={.status.containerStatuses[0].lastState.terminated.finishedAt}{'\n'}" 2>/dev/null \
+  local lbl ns pod
+  for entry in "${SUT[@]}"; do
+    IFS='|' read -r lbl ns pod <<< "${entry}"
+    kubectl -n "${ns}" get pod "${pod}" -o jsonpath="${ns} restarts={.status.containerStatuses[0].restartCount} lastReason={.status.containerStatuses[0].lastState.terminated.reason} lastExit={.status.containerStatuses[0].lastState.terminated.exitCode} finishedAt={.status.containerStatuses[0].lastState.terminated.finishedAt}{'\n'}" 2>/dev/null \
       || echo "${ns} (unavailable)"
   done
 }
@@ -166,10 +172,11 @@ fi
 # Put the runner in the same AZ as the systems under test. They are all on one
 # node pool in one AZ, so this is both symmetric (no system is closer than
 # another) and minimal. If they are spread across AZs there is no placement
-# that is fair to all four, so stay unpinned and say so.
+# that is fair to all of them, so stay unpinned and say so.
 if [[ -z "${BENCH_ZONE}" ]]; then
   zones=$(
-    for ns in "${PROM_NS}" "${MIMIR_NS}" "${O2_PARQUET_NS}" "${O2_VORTEX_NS}"; do
+    for entry in "${SUT[@]}"; do
+      ns="${entry#*|}"; ns="${ns%|*}"
       for node in $(kubectl -n "${ns}" get pods \
             -o jsonpath='{.items[*].spec.nodeName}' 2>/dev/null); do
         kubectl get node "${node}" \
@@ -205,7 +212,7 @@ metadata:
   namespace: ${BENCH_NS}
 spec:
   # Deliberately NO toleration for the \`perf\` taint: this pod must not be
-  # schedulable onto the four nodes under test.
+  # schedulable onto the nodes under test.
   restartPolicy: Never
   nodeSelector:
 EOF
@@ -260,8 +267,8 @@ kexec_ok sh -c "chmod +x ${REMOTE_DIR}/bench/*.sh ${REMOTE_DIR}/bench/summarize.
 envs=(
   "PROM_BASE=http://${PROM_SVC}.${PROM_NS}.svc.cluster.local:${PROM_PORT}"
   "MIMIR_BASE=http://${MIMIR_SVC}.${MIMIR_NS}.svc.cluster.local:${MIMIR_PORT}/prometheus"
+  "VM_BASE=http://${VM_SVC}.${VM_NS}.svc.cluster.local:${VM_PORT}"
   "O2_PARQUET_BASE=http://${O2_SVC}.${O2_PARQUET_NS}.svc.cluster.local:${O2_PORT}/api/default/prometheus"
-  "O2_VORTEX_BASE=http://${O2_SVC}.${O2_VORTEX_NS}.svc.cluster.local:${O2_PORT}/api/default/prometheus"
 )
 # Forward the knobs from config.sh, but only the ones actually set here, so the
 # defaults in config.sh stay in charge of everything else.
@@ -452,13 +459,15 @@ fi
   echo "transport       ClusterIP Service DNS (no port-forward)"
   # The memory envelope is the variable between benchmark rounds, so a CSV that
   # does not carry it cannot be told apart from one run at a different limit.
-  for e in "prometheus|${PROM_NS}|prometheus-standalone-0" \
-           "mimir|${MIMIR_NS}|mimir-standalone-0" \
-           "o2-parquet|${O2_PARQUET_NS}|o2-openobserve-standalone-0" \
-           "o2-vortex|${O2_VORTEX_NS}|o2-openobserve-standalone-0"; do
+  for e in "${SUT[@]}"; do
     IFS='|' read -r lbl ns pd <<< "${e}"
     echo "mem_limit_${lbl}  $(kubectl -n "${ns}" get pod "${pd}" \
       -o jsonpath='{.spec.containers[0].resources.limits.memory}' 2>/dev/null || echo '?')"
+    # The image is the A/B variable between the two OpenObserve deployments in
+    # this round, so a CSV that does not carry it cannot be told apart from one
+    # run against different builds.
+    echo "image_${lbl}      $(kubectl -n "${ns}" get pod "${pd}" \
+      -o jsonpath='{.spec.containers[0].image}' 2>/dev/null || echo '?')"
   done
 } >> "../results/${stamp}/run-metadata.txt"
 
