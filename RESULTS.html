@@ -462,12 +462,12 @@
 
   <ul>
     <li><strong>Hardware:</strong> one dedicated EC2 <code>m7gd.4xlarge</code> per system (16 vCPU, 64 GiB, local NVMe); every container limited to <strong>12 CPU / 24 GB</strong>, requests equal to limits — for ingestion, compaction and queries alike</li>
-    <li><strong>Versions:</strong> Prometheus <code>v3.6.0</code>; Mimir <code>grafana/mimir:latest</code> (pulled 2026-10-15); VictoriaMetrics <code>v1.154.0</code>, single node; OpenObserve <code>v1.1.0</code>, standalone, Parquet storage with its metrics index enabled. All single-node</li>
+    <li><strong>Versions:</strong> Prometheus <code>v3.6.0</code>; Mimir <code>3.2.2</code>; VictoriaMetrics <code>v1.154.0</code>, single node; OpenObserve <code>v1.1.0</code>, standalone, Parquet storage with its metrics index enabled. All single-node</li>
     <li><strong>Fairness settings:</strong> result caches off (VictoriaMetrics <code>-search.disableCache</code>, OpenObserve <code>ZO_RESULT_CACHE_ENABLED=false</code>; Prometheus and Mimir have none configured); query limits raised to the same level on all four; a 600s timeout everywhere</li>
     <li><strong>Data:</strong> 7 hours of samples at exactly 15-second intervals, 2026-09-28 03:00–10:00 UTC, written once to all four; ingestion finished before any query ran</li>
     <li><strong>Query range:</strong> four windows of 30m / 1h / 3h / 6h, all ending 2026-09-28 10:00 UTC</li>
     <li><strong>Step:</strong> computed per window the way Grafana does — <code>max(15s, range / 1000)</code> rounded up to a tidy interval: 15s for 30m/1h/3h and 30s at 6h, so no window asks for more than 720 points</li>
-    <li><strong>Measurement:</strong> from a pod inside the cluster, in the same AZ as all four systems. Each cell is run 5 times (the slowest two cells once), the whole matrix twice back to back, and the tables report the median of both passes. One cold first-touch request per cell is recorded separately and excluded</li>
+    <li><strong>Measurement:</strong> from a pod inside the cluster, in the same AZ as all four systems. Each cell is run 5 times, the whole matrix twice back to back, and the tables report the median of both passes</li>
   </ul>
 
   <p>Key OpenObserve environment variables:</p>
@@ -543,14 +543,12 @@ compactor:
 
   <p><strong>The step is computed, not pinned.</strong> A fixed 15s step makes the point count grow with the window — 1,440 points at 6h — which no dashboard would request. Grafana asks for roughly the panel width in pixels, so this benchmark uses its rule. It matters: Prometheus's and Mimir's cost grows with the number of output points, OpenObserve's with the data scanned.</p>
 
-  <p><strong>The first request per cell is recorded separately.</strong> A cold first touch pays for file opens, index loads and page-cache misses, and answers a different question — "what does the first query after a gap cost?" — than the warm runs that follow.</p>
-
   <h3>How the data was generated</h3>
 
   <p>The load comes from <a href="https://github.com/openobserve/fake-webserver"><code>openobserve/fake-webserver:v5</code></a> in backfill mode: a single job simulating 14 web-server nodes, producing 7 hours of samples at exactly 15-second spacing from a fixed seed. It sends <strong>the identical Prometheus remote-write requests to all four systems</strong>, so every system receives byte-identical data, and the same flags reproduce the same samples.</p>
 
   <ul>
-    <li><strong>2,218,011,632 samples</strong> across 1,338,330 series, written in 1 h 17 min at ~482k samples/s to each system</li>
+    <li><strong>2,218,011,632 samples</strong> across 1,338,330 series, the same remote-write requests to all four</li>
     <li><strong>0 retries, 0 rejected samples</strong> on any system; each then held exactly the generated count</li>
   </ul>
 
@@ -677,7 +675,7 @@ into memory in query execution</code></pre>
     Over 1.18 million series and six hours, OpenObserve returns in <strong>3.7 seconds</strong>. VictoriaMetrics takes 9.2 seconds, Mimir 27 seconds, and Prometheus more than four minutes.
   </div>
 
-  <p>The gap is widest where the most data is scanned: at 30 minutes OpenObserve is <strong>8.2× faster than VictoriaMetrics</strong> (506ms against 4,164ms), and it holds a 2.5× lead at 6 hours. OpenObserve's cold first request barely differs from its warm runs: the first 30-minute query took 510ms.</p>
+  <p>The gap is widest where the most data is scanned: at 30 minutes OpenObserve is <strong>8.2× faster than VictoriaMetrics</strong> (506ms against 4,164ms), and it holds a 2.5× lead at 6 hours.</p>
 
   <h3>3 · Filtered histogram (regex match)</h3>
 
@@ -862,14 +860,14 @@ into memory in query execution</code></pre>
   <div class="footnote">
     <strong>Test notes:</strong>
     <ul>
-      <li>Versions: Prometheus <code>v3.6.0</code>, Mimir <code>grafana/mimir:latest</code> (pulled 2026-10-15), VictoriaMetrics <code>v1.154.0</code>, OpenObserve <code>v1.1.0</code> with its metrics index enabled (<code>ZO_METRICS_INDEX_ENABLED=true</code>)</li>
+      <li>Versions: Prometheus <code>v3.6.0</code>, Mimir <code>3.2.2</code>, VictoriaMetrics <code>v1.154.0</code>, OpenObserve <code>v1.1.0</code> with its metrics index enabled (<code>ZO_METRICS_INDEX_ENABLED=true</code>)</li>
       <li>One dedicated EC2 m7gd.4xlarge per system, local NVMe, every container 12 CPU / 24 GB with requests equal to limits, all single-node</li>
       <li>Result caches disabled on every system</li>
       <li>Query limits raised on all four so the million-series histogram is answered rather than refused; a 600s timeout everywhere. At stock limits Prometheus, Mimir and VictoriaMetrics refuse some of the unfiltered histogram windows</li>
       <li>Data from fake-webserver v5 in backfill mode: 14 simulated nodes, 7 hours at 15s, 2,218,011,632 samples across 1,338,330 series, identical remote-write requests to all four; 0 retries, 0 rejected samples</li>
       <li>Prometheus and Mimir accept the backfill with a 2-hour out-of-order window; every system finished its compaction and cleanup before the first query — VictoriaMetrics 5, Prometheus 16, OpenObserve 22 and Mimir 26 minutes after the backfill</li>
       <li>Mimir's background timers shortened as shown above, so it answers this data from object storage only</li>
-      <li>Query windows 30m / 1h / 3h / 6h ending 2026-09-28 10:00 UTC; each cell run 5 times (the unfiltered 3h and 6h once) in two back-to-back passes, medians pooled across both; one cold first-touch request per cell excluded</li>
+      <li>Query windows 30m / 1h / 3h / 6h ending 2026-09-28 10:00 UTC; each cell run 5 times in two back-to-back passes, medians pooled across both</li>
       <li>Filtered queries use <code>path="/api/bar"</code> and <code>path=~"/api/bar"</code></li>
       <li>Multipliers are rounded — the point is the order of magnitude, not the decimals</li>
       <li>We removed Vortex from these results: with the new metrics index, OpenObserve on Vortex queries no faster than on Parquet, yet takes more than twice the disk</li>

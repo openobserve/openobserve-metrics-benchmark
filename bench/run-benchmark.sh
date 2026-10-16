@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs the four PromQL queries against all four systems, over every window in
-# WINDOWS, RUNS times each plus one cold run 0 -- with the unfiltered histogram
-# recorded once on the widest windows (see SINGLE_RUN_CELLS).
+# WINDOWS, RUNS times each plus one discarded warm-up run 0 (SINGLE_RUN_CELLS
+# can cut chosen cells to one recorded run; empty by default).
 #
 # The step is computed per window the way Grafana does, not pinned at 15s; see
 # config.sh.

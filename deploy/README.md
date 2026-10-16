@@ -59,11 +59,10 @@ out-of-order sample is a 400 and the backfill aborts.
 **`mimir/`** — single-binary mode on filesystem blocks storage, replication
 factor 1, multitenancy off. Write limits are raised far above the workload.
 For the backfill: `limits.out_of_order_time_window: 2h` (same reason as
-Prometheus) and `limits.query_ingesters_within: 0`, so queries always include
-the ingesters — by default data older than 13h is read only from the
-store-gateway, and backfilled data is a day old while its last hours can still
-be in the ingester head. The image is `grafana/mimir:latest`; pin a tag before a
-round you want comparable later.
+Prometheus), and compaction, sync and deletion timers shortened from hours to
+minutes, so Mimir settles about 30 minutes after the load and answers the
+backfilled data from object storage. The image is pinned to
+`grafana/mimir:3.2.2`.
 
 **`victoriametrics/`** — `victoria-metrics-single` chart, release `vms`.
 `-search.disableCache` is on, so it never answers from a result cache.
@@ -94,7 +93,7 @@ runs re-execute the query.
 mode. It simulates `-num-nodes=14` on a virtual clock and writes every point
 at exactly `start + k × step` to all four systems by Prometheus remote write
 (protobuf + snappy, 10k samples per request, 429/5xx retried, any other 4xx
-aborts, the slowest target sets the pace), then exits. The defaults are the
+aborts), then exits. The defaults are the
 published dataset:
 
 | | |
@@ -102,7 +101,6 @@ published dataset:
 | span | 2026-09-28 03:00:00Z + 7h (the 6h window plus 1h lookback), 15 s step, seed 1 |
 | samples | 2,218,011,632, byte-identical on every run with the same flags |
 | series | 1,338,330 — 1,179,360 `..._bucket`, 45,360 each `_sum`/`_count`/`requests_total` |
-| wall time | 1 h 20 min at ~464k samples/s to each system (2026-10-15, five targets then), 0 retries |
 
 ```bash
 ./fake-webserver/install.sh                                   # the default dataset

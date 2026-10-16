@@ -8,7 +8,7 @@ helm repo update vm
 kubectl create ns perf-vm --dry-run=client -o yaml | kubectl apply -f -
 
 helm --namespace perf-vm -f values.yaml \
-  upgrade --install vms vm/victoria-metrics-single
+  upgrade --install vms vm/victoria-metrics-single --version 0.49.0
 
 kubectl -n perf-vm rollout status sts/vms-victoria-metrics-single-server --timeout=10m
 

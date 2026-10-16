@@ -134,9 +134,8 @@ back. Do not time queries through `port-forward.sh`: the API-server hop puts a
 1–3 s floor under every request, which destroys the ratios. See
 [bench/README.md](bench/README.md#measure-from-inside-the-cluster).
 
-Each run is 4 queries × 4 windows × 4 systems, each cell one discarded cold
-request plus `RUNS` recorded ones (the unfiltered 3h and 6h cells are recorded
-once). Results land in `results/<timestamp>/` as `raw.csv`, `summary.md`,
+Each run is 4 queries × 4 windows × 4 systems, each cell one discarded warm-up
+request plus `RUNS` recorded ones. Results land in `results/<timestamp>/` as `raw.csv`, `summary.md`,
 `run-metadata.txt` and `pod-state.txt` (container restarts, so an OOMKill is
 not filed as a network error).
 
@@ -174,8 +173,6 @@ Stated plainly, because a reproduction you cannot audit is not a reproduction:
 - **State your `step`.** `query_range` needs one; this repo computes it per
   window the way Grafana does, `max(15s, range / 1000)` rounded up, and
   RESULTS.md publishes it. It is the biggest single lever on absolute latency.
-- **Mimir is `grafana/mimir:latest`.** Pin a concrete tag before a round you
-  want to be comparable later.
 - **Backfilled data lays out differently from live-scraped data.** These
   numbers are for a backfilled store; the same series scraped live are stored
   in a different layout and can read faster or slower.
@@ -205,10 +202,10 @@ bench/
   queries.sh           The four PromQL expressions
   run-in-cluster.sh    Runs the driver from a pod — use this for timings
   run-benchmark.sh     The main driver -> results/<timestamp>/
-  summarize.py         raw.csv -> markdown tables, warm and cold separately
+  summarize.py         raw.csv -> markdown tables
   cardinality.sh       Series counts per system (run this first)
   resources.sh         CPU / memory / disk per system
-  drop-caches.sh       Force a cold query
+  drop-caches.sh       Evict the page cache on a system's node
   port-forward.sh      Local ports — for browsing a UI, never for timing
   experiments/         One-off studies, not part of the benchmark
 results/               Your runs land here (local only, not in git)

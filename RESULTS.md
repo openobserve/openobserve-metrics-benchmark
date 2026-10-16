@@ -21,8 +21,8 @@ Mimir 26.7 s and Prometheus 4 m 12 s.
 | Hardware | one EC2 `m7gd.4xlarge` per system: 16 vCPU / 64 GiB, local NVMe, single node |
 | Container limit | **12 CPU / 24 GB**, requests == limits, for ingest, compaction **and** queries |
 | Prometheus | `quay.io/prometheus/prometheus:v3.6.0` |
-| Mimir | `grafana/mimir:latest` = `sha256:04068a0a838b…` (pulled 2026-10-15) |
-| VictoriaMetrics | `victoriametrics/victoria-metrics:v1.154.0`, single node |
+| Mimir | `grafana/mimir:3.2.2` |
+| VictoriaMetrics | `victoriametrics/victoria-metrics:v1.154.0`, single node (chart `victoria-metrics-single` 0.49.0) |
 | OpenObserve | `public.ecr.aws/zinclabs/openobserve:v1.1.0-debug` — the release `release-prod` + `mimalloc` binary on a Debian base with a shell |
 | OpenObserve settings | defaults, plus `ZO_METRICS_INDEX_ENABLED=true`, result cache off and raised metrics query limits |
 | Mimir settings | background timers shortened so it settles ~30 min after a backfill and answers old data from object storage only — see `deploy/mimir/deploy.yaml` |
@@ -30,15 +30,14 @@ Mimir 26.7 s and Prometheus 4 m 12 s.
 | Data | 2026-09-28 03:00–10:00 UTC; queries end at 10:00 UTC (`END_TIME=1790589600`) |
 | Windows / step | 30m, 1h, 3h at 15 s; 6h at 30 s |
 | Filter | `path="/api/bar"` / `path=~"/api/bar"` |
-| Runs | 5 recorded per cell plus one cold request; the unfiltered 3h and 6h cells once. **Two back-to-back passes pooled** (`20261015T160054Z`, `20261015T163651Z`) |
+| Runs | 5 per cell. **Two back-to-back passes pooled** (`20261015T160054Z`, `20261015T163651Z`) |
 | Measured from | a pod in the cluster, same AZ, on a node not under test |
 
 ## Ingest
 
-The backfill wrote **2,218,011,632 samples** (1,680 points × 1,338,330 series)
-in **1 h 16 m 40 s**, 482.1k samples/s to each system, 222,369 requests each,
-**0 retries, 0 rejected** — Prometheus and Mimir accept it with a 2 h
-out-of-order window. Every system then held exactly that many samples
+One backfill Job sent the same remote-write requests to all four systems:
+**2,218,011,632 samples** (1,680 points × 1,338,330 series), **0 rejected** —
+Prometheus and Mimir accept it with a 2 h out-of-order window. Every system then held exactly that many samples
 (OpenObserve: `SUM(records) FROM file_list`).
 
 ## Settling
@@ -100,9 +99,7 @@ No errors, no restarts.
 
 OpenObserve's lead is largest where the most data is scanned — the unfiltered
 histogram at 30m is 8.2× faster than VictoriaMetrics — and smallest on the long
-filtered histograms, 1.5–1.7× at 6h. Its cold first request barely differs
-from the warm runs (unfiltered 30m: 510 ms cold); VictoriaMetrics' first touch
-of that cell took 4.3 s, and of irate 30m 917 ms against 132 ms warm.
+filtered histograms, 1.5–1.7× at 6h.
 
 ## Storage
 

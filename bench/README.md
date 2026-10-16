@@ -74,9 +74,9 @@ scan volume does.
 | `WINDOWS` | `1800 3600 10800 21600` | Seconds: 30m, 1h, 3h, 6h |
 | `STEP` | empty → per window | Empty means Grafana's rule, `max(15s, range/1000)` rounded up. See the warning below |
 | `MAX_DATA_POINTS` / `MIN_INTERVAL` | `1000` / `15` | The two inputs to that rule |
-| `RUNS` | `3` | Repeats per (system, query, window) |
-| `WARMUP` | `1` | Cold first-touch request, recorded as run 0, excluded from medians |
-| `SINGLE_RUN_CELLS` | `histogram-unfiltered:3h histogram-unfiltered:6h` | Cells recorded once instead of `RUNS` |
+| `RUNS` | `5` | Repeats per (system, query, window) |
+| `WARMUP` | `1` | One warm-up request per cell, recorded as run 0, excluded from medians |
+| `SINGLE_RUN_CELLS` | empty | Cells to record once instead of `RUNS`, e.g. `histogram-unfiltered:6h` |
 | `PATH_FILTER` | `/api/bar` | The `$path` in queries 3 and 4. One of the four heavy paths — see `config.sh` |
 | `CURL_TIMEOUT` | `700` | Must exceed the servers' own 600s query timeout |
 | `SYSTEMS_FILTER` | — | Substring; run one system only |
@@ -112,7 +112,7 @@ PATH_FILTER=/api/service-1 ./run-benchmark.sh
 
 Each run creates `results/<UTC timestamp>/`:
 
-- `raw.csv` — one row per request: `query,window,system,run,http_code,latency_ms,series,error` (`run=0` is the cold request)
+- `raw.csv` — one row per request: `query,window,system,run,http_code,latency_ms,series,error` (`run=0` is the discarded warm-up request)
 - `summary.md` — the article's tables, regenerated from `raw.csv`
 - `run-metadata.txt` — the exact parameters used, so a CSV is never orphaned
 
@@ -161,25 +161,8 @@ metrics-server is needed.
 > **Two memory columns, and they disagree.** `rss` is anonymous pages only;
 > `workset` is cgroup `workingSetBytes` = rss + active page cache + kernel
 > memory. A system writing data files continuously accumulates page cache, so
-> OpenObserve reads ~1.5GB rss against ~10GB workset — by workset it looks like
-> the heaviest system, by rss it is the lightest. **Compare on rss**, and say so
+> its workset can be several times its rss. **Compare on rss**, and say so
 > when you publish. (rss excludes file-backed mmap pages, so it undercounts
 > engines that mmap their chunk files.) CPU is an instantaneous rate — take several snapshots during
 steady-state ingestion rather than trusting one reading. Disk only means
 something after ingestion has run long enough to compact.
-
-## Cold queries
-
-```bash
-./drop-caches.sh o2-parquet
-SYSTEMS_FILTER=o2-parquet QUERY_FILTER=histogram-regex RUNS=1 ./run-benchmark.sh
-```
-
-This evicts the OS page cache on the node hosting that system, so the next query
-reads from disk. The article's cold/hot gap (~30s vs ~2s on the 3h histogram) is
-disk bandwidth, not query engine: the query pulls ~3.6GB of compressed data, and
-3.6GB ÷ 125 MB/s ≈ 29s on gp3's default throughput. The same query took ~3.5s on
-io2. Expect your own numbers to track your own disk.
-
-`drop-caches.sh` affects everything on that node, not just the system named.
-Only run it against dedicated benchmark nodes.

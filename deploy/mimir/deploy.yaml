@@ -131,7 +131,7 @@ spec:
           name: data
       containers:
       - name: mimir-standalone
-        image: grafana/mimir:latest
+        image: grafana/mimir:3.2.2
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 9009

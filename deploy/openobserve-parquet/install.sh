@@ -8,7 +8,7 @@ helm repo update openobserve
 kubectl create ns perf-o2-parquet --dry-run=client -o yaml | kubectl apply -f -
 
 helm --namespace perf-o2-parquet -f values.yaml \
-  upgrade --install o2 openobserve/openobserve-standalone
+  upgrade --install o2 openobserve/openobserve-standalone --version 1.0.1
 
 kubectl -n perf-o2-parquet rollout status sts/o2-openobserve-standalone --timeout=10m
 

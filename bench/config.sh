@@ -78,7 +78,7 @@ SYSTEMS=(
 : "${MIN_INTERVAL:=15}"
 
 # Runs per (system, query, window). The article reports all three raw values.
-: "${RUNS:=3}"
+: "${RUNS:=5}"
 
 # Cold first-touch request per cell, recorded as run 0 and kept OUT of the
 # medians -- summarize.py reports it separately. It measures file opens, index
@@ -86,10 +86,9 @@ SYSTEMS=(
 # the warm value. WARMUP=0 folds it into the recorded runs instead.
 : "${WARMUP:=1}"
 
-# Cells getting ONE recorded run instead of RUNS, as `query-id:window`. A 3h
-# unfiltered request costs minutes (Prometheus: ~4 min at 6h) and its spread is dominated by
-# scan volume, not run-to-run noise. Run 0 still happens.
-: "${SINGLE_RUN_CELLS:=histogram-unfiltered:3h histogram-unfiltered:6h}"
+# Cells getting ONE recorded run instead of RUNS, as `query-id:window`, e.g.
+# "histogram-unfiltered:6h". Empty by default: every cell runs RUNS times.
+: "${SINGLE_RUN_CELLS:=}"
 
 # End of the query range, a unix timestamp. Default: 5 minutes ago,
 # so the newest data is already flushed everywhere. Pin an absolute value when

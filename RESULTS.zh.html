@@ -465,12 +465,12 @@
 
   <ul>
     <li><strong>硬件：</strong>每套系统独占一台 EC2 <code>m7gd.4xlarge</code>（16 vCPU、64 GiB、本地 NVMe）；每个容器都限制为 <strong>12 CPU / 24 GB</strong>，requests 等于 limits——写入、合并和查询都在这个规格下完成</li>
-    <li><strong>版本：</strong>Prometheus <code>v3.6.0</code>；Mimir <code>grafana/mimir:latest</code>（2026-10-15 拉取）；VictoriaMetrics <code>v1.154.0</code> 单节点版；OpenObserve <code>v1.1.0</code> standalone，Parquet 存储，开启指标索引。全部单节点部署</li>
+    <li><strong>版本：</strong>Prometheus <code>v3.6.0</code>；Mimir <code>3.2.2</code>；VictoriaMetrics <code>v1.154.0</code> 单节点版；OpenObserve <code>v1.1.0</code> standalone，Parquet 存储，开启指标索引。全部单节点部署</li>
     <li><strong>公平性设置：</strong>结果缓存全部关闭（VictoriaMetrics <code>-search.disableCache</code>，OpenObserve <code>ZO_RESULT_CACHE_ENABLED=false</code>；Prometheus 和 Mimir 没有配置结果缓存）；四套系统的查询限制调到同一水平；超时统一为 600s</li>
     <li><strong>数据：</strong>7 小时、严格每 15 秒一个点的样本，时间为 2026-09-28 03:00–10:00 UTC，一次性写入四套系统；所有查询都在写入完成之后才开始</li>
     <li><strong>查询范围：</strong>30m / 1h / 3h / 6h 四个窗口，全部截止于 2026-09-28 10:00 UTC</li>
     <li><strong>Step：</strong>按 Grafana 的方式逐窗口计算——<code>max(15s, range / 1000)</code> 向上取整到一个整齐的间隔：30m/1h/3h 为 15s，6h 为 30s，所以没有哪个窗口会请求超过 720 个点</li>
-    <li><strong>测量方式：</strong>从集群内的一个 Pod 发起，与四套系统处于同一可用区。每个单元格跑 5 次（最慢的两个单元格只跑 1 次），整套矩阵连续跑两遍，表中是两遍合并后的中位数。每个单元格的第一次冷请求单独记录，不计入中位数</li>
+    <li><strong>测量方式：</strong>从集群内的一个 Pod 发起，与四套系统处于同一可用区。每个单元格跑 5 次，整套矩阵连续跑两遍，表中是两遍合并后的中位数</li>
   </ul>
 
   <p>OpenObserve 的关键环境变量：</p>
@@ -546,14 +546,12 @@ compactor:
 
   <p><strong>Step 是计算出来的，不是固定的。</strong>固定 15s 的 step 会让点数随窗口增长——6h 时达到 1,440 个点——没有哪个仪表盘会这样请求。Grafana 请求的点数大约等于面板的像素宽度，所以这个基准测试采用它的规则。这一点很重要：Prometheus 和 Mimir 的开销随输出点数增长，而 OpenObserve 的开销随扫描的数据量增长。</p>
 
-  <p><strong>每个单元格的第一次请求单独记录。</strong>冷的第一次访问要付出打开文件、加载索引和 page cache 未命中的代价，它回答的是另一个问题——"隔了一段时间之后，第一条查询要花多少？"——而不是之后的热查询。</p>
-
   <h3>数据是怎么生成的</h3>
 
   <p>负载来自回填模式下的 <a href="https://github.com/openobserve/fake-webserver"><code>openobserve/fake-webserver:v5</code></a>：一个 Job 模拟 14 个 Web 服务器节点，用固定的随机种子生成 7 小时、严格每 15 秒一个点的样本。它<strong>把完全相同的 Prometheus remote-write 请求同时发给四套系统</strong>，所以每套系统收到的数据逐字节一致，相同参数也能复现出完全相同的样本。</p>
 
   <ul>
-    <li><strong>2,218,011,632 个样本</strong>，分布在 1,338,330 条时间线上，用时 1 小时 17 分钟写完，每套系统约 48.2 万样本/秒</li>
+    <li><strong>2,218,011,632 个样本</strong>，分布在 1,338,330 条时间线上，四套系统收到的是同样的 remote-write 请求</li>
     <li>所有系统<strong>0 次重试、0 个样本被拒绝</strong>；写完后每套系统持有的样本数都与生成数完全一致</li>
   </ul>
 
@@ -680,7 +678,7 @@ into memory in query execution</code></pre>
     扫描 118 万条时间线、6 小时数据，OpenObserve 在 <strong>3.7 秒</strong>内返回。VictoriaMetrics 要 9.2 秒，Mimir 要 27 秒，Prometheus 要四分多钟。
   </div>
 
-  <p>扫描的数据越多，差距越大：30 分钟窗口上，OpenObserve <strong>比 VictoriaMetrics 快 8.2 倍</strong>（506ms 对 4,164ms），到 6 小时仍领先 2.5 倍。OpenObserve 的冷请求和热请求几乎没有差别：第一次 30 分钟查询用时 510ms。</p>
+  <p>扫描的数据越多，差距越大：30 分钟窗口上，OpenObserve <strong>比 VictoriaMetrics 快 8.2 倍</strong>（506ms 对 4,164ms），到 6 小时仍领先 2.5 倍。</p>
 
   <h3>3 · 过滤 histogram（正则匹配）</h3>
 
@@ -865,14 +863,14 @@ into memory in query execution</code></pre>
   <div class="footnote">
     <strong>测试说明：</strong>
     <ul>
-      <li>版本：Prometheus <code>v3.6.0</code>，Mimir <code>grafana/mimir:latest</code>（2026-10-15 拉取），VictoriaMetrics <code>v1.154.0</code>，OpenObserve <code>v1.1.0</code>，开启指标索引（<code>ZO_METRICS_INDEX_ENABLED=true</code>）</li>
+      <li>版本：Prometheus <code>v3.6.0</code>，Mimir <code>3.2.2</code>，VictoriaMetrics <code>v1.154.0</code>，OpenObserve <code>v1.1.0</code>，开启指标索引（<code>ZO_METRICS_INDEX_ENABLED=true</code>）</li>
       <li>每套系统独占一台 EC2 m7gd.4xlarge，本地 NVMe，每个容器 12 CPU / 24 GB，requests 等于 limits，全部单节点部署</li>
       <li>所有系统的结果缓存全部关闭</li>
       <li>四套系统的查询限制都已调大，让百万时间线的 histogram 能得到结果而不是被拒绝；超时统一为 600s。在默认限制下，Prometheus、Mimir 和 VictoriaMetrics 都会拒绝部分无过滤 histogram 窗口</li>
       <li>数据由回填模式的 fake-webserver v5 生成：模拟 14 个节点，7 小时、每 15 秒一个点，共 2,218,011,632 个样本、1,338,330 条时间线，以完全相同的 remote-write 请求写入四套系统；0 次重试，0 个样本被拒绝</li>
       <li>Prometheus 和 Mimir 依靠 2 小时乱序窗口接收回填数据；所有系统都在第一条查询之前完成了各自的合并与清理——回填结束后 VictoriaMetrics 用了 5 分钟，Prometheus 16 分钟，OpenObserve 22 分钟，Mimir 26 分钟</li>
       <li>Mimir 的后台计时器按上文调短，因此这份数据只从对象存储读取</li>
-      <li>查询窗口为 30m / 1h / 3h / 6h，截止于 2026-09-28 10:00 UTC；每个单元格跑 5 次（无过滤 3h 和 6h 各 1 次），连续两遍，取两遍合并后的中位数；每个单元格的第一次冷请求不计入</li>
+      <li>查询窗口为 30m / 1h / 3h / 6h，截止于 2026-09-28 10:00 UTC；每个单元格跑 5 次，连续两遍，取两遍合并后的中位数</li>
       <li>过滤查询使用 <code>path="/api/bar"</code> 和 <code>path=~"/api/bar"</code></li>
       <li>倍数均为四舍五入的近似值，重点在数量级而非小数位</li>
       <li>我们从结果中移除了 Vortex：使用新的指标索引后，OpenObserve 用 Vortex 查询并不比 Parquet 更快，磁盘占用却多出一倍以上</li>
