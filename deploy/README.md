@@ -113,8 +113,8 @@ BACKFILL_HOURS=1 ./fake-webserver/install.sh                  # a smoke test
 `install.sh` refuses to run while `job/backfill` exists (a second run
 duplicates every sample), follows the progress lines, and fails loudly if the
 Job did not complete. `-backfill-labels` adds the target labels a scrape would
-(`job`, `instance`, `pod`, `node`, …) so the series set matches the scraped
-rounds.
+(`job`, `instance`, `pod`, `node`, …) so every series carries the labels a
+real scrape would give it.
 
 The Job runs on VictoriaMetrics' node. It requests 1 CPU (all that is left
 beside a Guaranteed 12) and may use up to 6 of whatever is idle; it is gone

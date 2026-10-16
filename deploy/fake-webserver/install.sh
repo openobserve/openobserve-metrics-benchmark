@@ -21,7 +21,13 @@ sed -e "s|-backfill-start=.*|-backfill-start=${BACKFILL_START}|" \
     backfill-job.yaml | kubectl apply -f -
 
 kubectl -n perf-fakeserver wait --for=condition=ready pod -l job-name=backfill --timeout=5m
-kubectl -n perf-fakeserver logs -f job/backfill
+# The API server can close a long `logs -f` stream (http2 GOAWAY) mid-run; the
+# Job keeps going, so wait for it rather than reading the stream's end as its end.
+kubectl -n perf-fakeserver logs -f job/backfill || true
+until st="$(kubectl -n perf-fakeserver get job backfill -o jsonpath='{.status.succeeded}/{.status.failed}')" \
+      && [[ "${st}" == 1/* || "${st}" == */1 ]]; do
+  sleep 30
+done
 
 if [[ "$(kubectl -n perf-fakeserver get job backfill -o jsonpath='{.status.succeeded}')" != "1" ]]; then
   echo "error: the backfill did not complete; wipe the systems and start over." >&2

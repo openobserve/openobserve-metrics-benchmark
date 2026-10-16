@@ -6,14 +6,8 @@
 #   terminal 2:  ./cardinality.sh   /   a browser
 #
 # DO NOT TIME QUERIES THROUGH THIS. Every request is tunnelled through the
-# Kubernetes API server, which measured ~1,070ms for a trivial `query=1` that
-# Prometheus answers in microseconds -- ~5ms from inside the cluster.
-#
-# The overhead is not a constant that cancels out of a comparison: it grows with
-# response size, so it swamps a fast system and barely dents a slow one. On the
-# same irate query, OpenObserve/Parquet measured 158ms in-cluster and 2122ms
-# through here, while Prometheus went 1287ms -> 3445ms. The real 8.1x gap reads
-# as 1.6x through the tunnel.
+# Kubernetes API server, which adds about a second, and more for larger
+# responses -- it swamps a fast system and barely dents a slow one.
 #
 # Use ./run-in-cluster.sh for anything you intend to publish -- including
 # `--script cardinality.sh`, which needs no port-forward either. This script is

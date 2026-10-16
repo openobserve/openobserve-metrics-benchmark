@@ -87,20 +87,20 @@ SYSTEMS=(
 : "${WARMUP:=1}"
 
 # Cells getting ONE recorded run instead of RUNS, as `query-id:window`. A 3h
-# unfiltered request costs minutes (Mimir: 351s) and its spread is dominated by
+# unfiltered request costs minutes (Prometheus: ~4 min at 6h) and its spread is dominated by
 # scan volume, not run-to-run noise. Run 0 still happens.
 : "${SINGLE_RUN_CELLS:=histogram-unfiltered:3h histogram-unfiltered:6h}"
 
-# End of the query range, RFC3339 or a unix timestamp. Default: 5 minutes ago,
+# End of the query range, a unix timestamp. Default: 5 minutes ago,
 # so the newest data is already flushed everywhere. Pin an absolute value when
 # comparing across systems on different days.
-#   END_TIME=2026-08-06T03:00:00+08:00 ./run-benchmark.sh
+#   END_TIME=1790589600 ./run-benchmark.sh    # 2026-09-28 10:00 UTC
 : "${END_TIME:=}"
 
 # Per-request timeout. MUST exceed the servers' own query timeout (600s, see
 # deploy/README.md#query-limits) or curl cuts a query off first and the CSV
-# records our threshold as if it were the system's. Mimir's 3h unfiltered
-# histogram measured 351s.
+# records our threshold as if it were the system's. Prometheus' 6h unfiltered
+# histogram takes ~250s.
 : "${CURL_TIMEOUT:=700}"
 
 # -----------------------------------------------------------------------------
@@ -122,7 +122,7 @@ resolve_end_time() {
   fi
   date -d "${END_TIME}" +%s 2>/dev/null && return
   date -j -f "%Y-%m-%dT%H:%M:%S%z" "${END_TIME}" +%s 2>/dev/null && return
-  die "cannot parse END_TIME='${END_TIME}' (use a unix timestamp or RFC3339 like 2026-08-06T03:00:00+08:00)"
+  die "cannot parse END_TIME='${END_TIME}' (use a unix timestamp, e.g. 1790589600)"
 }
 
 human_window() {

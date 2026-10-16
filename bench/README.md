@@ -70,7 +70,7 @@ scan volume does.
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `END_TIME` | 5 minutes ago | RFC3339 or unix ts. **Pin it** when comparing runs across days |
+| `END_TIME` | 5 minutes ago | unix timestamp. **Pin it** when comparing runs across days |
 | `WINDOWS` | `1800 3600 10800 21600` | Seconds: 30m, 1h, 3h, 6h |
 | `STEP` | empty → per window | Empty means Grafana's rule, `max(15s, range/1000)` rounded up. See the warning below |
 | `MAX_DATA_POINTS` / `MIN_INTERVAL` | `1000` / `15` | The two inputs to that rule |
@@ -127,22 +127,10 @@ what a dashboard actually waits for.
 
 ### Measure from inside the cluster
 
-**Do not publish numbers from a port-forwarded run.** The API-server hop cost
-**~1,070ms** for a trivial `query=1` that Prometheus answers in microseconds;
-the same request from an in-cluster pod cost **~5ms**.
-
-The overhead is not a constant you can subtract — it grows with response size,
-so it swamps a fast system and barely dents a slow one. Same `irate` query, same
-`END_TIME`:
-
-| System (2026-08-09) | via port-forward | in-cluster |
-| --- | --- | --- |
-| Prometheus | 3445 ms | 1287 ms |
-| Mimir | 4181 ms | 1319 ms |
-| OpenObserve · Parquet | 2122 ms | 158 ms |
-
-A real 8.1× gap reads as 1.6× through the tunnel. The fastest system is punished
-hardest.
+**Do not publish numbers from a port-forwarded run.** Every request then goes
+through the Kubernetes API server, which adds about a second, and more for
+larger responses — it swamps a fast system and barely dents a slow one, so the
+ratios between systems are lost.
 
 `run-in-cluster.sh` starts a runner pod on a node that is *not* under test (no
 `perf` toleration, so it cannot steal CPU from what it measures), pinned to the

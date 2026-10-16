@@ -35,12 +35,12 @@ samples — at 12 CPU / 24 GB each. The query that scans everything,
 
 | System | Latency |
 | --- | --- |
-| Prometheus | 4 m 17 s |
-| Mimir | 71.3 s |
-| VictoriaMetrics | 8.80 s |
-| **OpenObserve** | **3.70 s** |
+| Prometheus | 4 m 12 s |
+| Mimir | 26.7 s |
+| VictoriaMetrics | 9.25 s |
+| **OpenObserve** | **3.67 s** |
 
-OpenObserve is fastest in all 16 cells: geomean 0.31× VictoriaMetrics', 6.1% of
+OpenObserve is fastest in all 16 cells: geomean 0.32× VictoriaMetrics', 11% of
 Mimir's and 2.0% of Prometheus'. Vortex is left out of the published results:
 with the new metrics index it queries no faster than Parquet but takes more than
 twice the disk.
@@ -140,11 +140,10 @@ once). Results land in `results/<timestamp>/` as `raw.csv`, `summary.md`,
 `run-metadata.txt` and `pod-state.txt` (container restarts, so an OOMKill is
 not filed as a network error).
 
-**Run it twice and pool.** Recent rounds saw ~20 s slowdowns that hit every
-system at once and came from outside them; two back-to-back runs pooled into
-one median per cell absorb them: concatenate the recorded runs of both
-`raw.csv` files per cell and take the median. The 2026-10-15 round saw no such
-slowdown, and its two passes agreed within 25% on 79 of 80 cells.
+**Run it twice and pool.** A slowdown from outside the systems can hit every
+one of them at once; two back-to-back runs pooled into one median per cell
+absorb it: concatenate the recorded runs of both `raw.csv` files per cell and
+take the median.
 
 See [bench/README.md](bench/README.md) for the knobs and
 [deploy/README.md](deploy/README.md) for what each manifest does and why.
@@ -177,10 +176,9 @@ Stated plainly, because a reproduction you cannot audit is not a reproduction:
   RESULTS.md publishes it. It is the biggest single lever on absolute latency.
 - **Mimir is `grafana/mimir:latest`.** Pin a concrete tag before a round you
   want to be comparable later.
-- **Backfilled data lays out differently from live-scraped data.**
-  VictoriaMetrics has read ~35–40% slower on a backfilled store than on a
-  live-scraped one with the same series, so numbers from a scraped dataset are
-  not comparable with these.
+- **Backfilled data lays out differently from live-scraped data.** These
+  numbers are for a backfilled store; the same series scraped live are stored
+  in a different layout and can read faster or slower.
 - **Disk settles at different times per system.** Mimir is configured to
   drop superseded blocks and ingester copies within ~30 minutes of a backfill;
   OpenObserve deletes merged inputs after

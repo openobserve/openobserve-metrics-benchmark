@@ -12,8 +12,7 @@
 # -- an instant query at "now" falls outside every lookback window and every
 # system correctly answers zero. Point END_TIME inside the data:
 #
-#   END_TIME=1786276800 ./cardinality.sh
-#   END_TIME=2026-08-09T20:00:00+08:00 ./cardinality.sh
+#   END_TIME=1790589600 ./cardinality.sh    # 2026-09-28 10:00 UTC
 set -uo pipefail
 
 cd "$(dirname "$0")"

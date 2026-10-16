@@ -11,7 +11,7 @@
 #
 # Usage:
 #   ./run-benchmark.sh
-#   END_TIME=2026-08-06T03:00:00+08:00 ./run-benchmark.sh
+#   END_TIME=1790589600 ./run-benchmark.sh    # 2026-09-28 10:00 UTC
 #   SYSTEMS_FILTER=o2-parquet QUERY_FILTER=histogram-regex ./run-benchmark.sh
 set -uo pipefail
 

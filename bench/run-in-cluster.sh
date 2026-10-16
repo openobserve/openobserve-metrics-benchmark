@@ -4,24 +4,11 @@
 #
 # Why this exists
 # ---------------
-# port-forward.sh tunnels every request through the Kubernetes API server.
-# Measured against the EKS cluster from a workstation, a trivial `query=1` --
-# which Prometheus answers in microseconds -- costs ~1,070ms round trip. The
-# identical request from a pod in the cluster costs ~5ms.
-#
-# So port-forward puts a ~1-2s floor under every number. That floor is NOT a
-# constant you can subtract: it grows with response size, because the tunnel is
-# also a throughput bottleneck. It therefore swamps a fast system and barely
-# dents a slow one, compressing the systems together and destroying the ratios.
-# Measured on the same irate query at the same END_TIME:
-#
-#              port-forward   in-cluster
-#   Prometheus      3445ms       1287ms
-#   Mimir           4181ms       1319ms
-#   O2/Parquet      2122ms        158ms
-#
-# A real 8.1x gap (Prometheus vs Parquet) reads as 1.6x through the tunnel. So
-# neither the absolutes NOR the ordering survive a port-forwarded run.
+# port-forward.sh tunnels every request through the Kubernetes API server,
+# which puts a ~1-2s floor under every number. That floor is NOT a constant you
+# can subtract: it grows with response size, because the tunnel is also a
+# throughput bottleneck. It swamps a fast system and barely dents a slow one,
+# so neither the absolutes nor the ratios survive a port-forwarded run.
 #
 # What this script does instead
 #   1. starts a small pod on a node that is NOT under test -- it carries no
@@ -36,7 +23,7 @@
 # Usage:
 #   ./run-in-cluster.sh
 #   RUNS=5 WINDOWS="1800 3600" ./run-in-cluster.sh
-#   END_TIME=2026-08-06T03:00:00+08:00 ./run-in-cluster.sh
+#   END_TIME=1790589600 ./run-in-cluster.sh    # 2026-09-28 10:00 UTC
 #   O2_PARQUET_NS=my-parquet-ns ./run-in-cluster.sh
 #
 #   ./run-in-cluster.sh --script cardinality.sh         # any bench/ script

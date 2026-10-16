@@ -397,6 +397,23 @@
     .chart-grid { grid-template-columns: 1fr; gap: 28px; }
     .chart-grid .bar-row { grid-template-columns: 110px 1fr 50px; }
   }
+
+  /* mobile tables: abbreviated headers, tighter cells */
+  .ab, .ab-note { display: none; }
+  @media (max-width: 640px) {
+    table { font-size: 0.8rem; }
+    th, td { padding: 8px 6px; }
+    th { font-size: 0.74rem; letter-spacing: 0; }
+    table.results th, table.results td { text-align: right; }
+    table.results th:first-child, table.results td:first-child { text-align: left; }
+    .fl { display: none; }
+    .ab { display: inline; }
+    .ab-note { display: block; font-size: 0.8rem; color: var(--ink-mute); margin: 8px 0 -12px; }
+    td code { word-break: break-all; font-size: 0.78em; }
+  }
+
+  /* storage table: keep the size column on one line */
+  table.storage th:nth-child(2), table.storage td:nth-child(2) { white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -421,17 +438,17 @@
 
       <rect x="200" y="88" width="440.0" height="44" rx="3" fill="#c14920" opacity="0.92"/>
       <text x="192" y="116" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">Prometheus</text>
-      <text x="632" y="116" text-anchor="end" font-family="sans-serif" font-size="15" font-weight="700" fill="#ffffff">4m 17s</text>
+      <text x="632" y="116" text-anchor="end" font-family="sans-serif" font-size="15" font-weight="700" fill="#ffffff">4m 12s</text>
 
-      <rect x="200" y="148" width="122.1" height="44" rx="3" fill="#ba7517" opacity="0.92"/>
+      <rect x="200" y="148" width="46.6" height="44" rx="3" fill="#ba7517" opacity="0.92"/>
       <text x="192" y="176" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">Mimir</text>
-      <text x="314" y="176" text-anchor="end" font-family="sans-serif" font-size="15" font-weight="700" fill="#ffffff">71.3s</text>
+      <text x="255" y="176" font-family="sans-serif" font-size="15" font-weight="700" fill="#ba7517">26.7s</text>
 
-      <rect x="200" y="208" width="15.1" height="44" rx="3" fill="#185fa5" opacity="0.92"/>
+      <rect x="200" y="208" width="16.1" height="44" rx="3" fill="#185fa5" opacity="0.92"/>
       <text x="192" y="236" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">VictoriaMetrics</text>
-      <text x="223" y="236" font-family="sans-serif" font-size="15" font-weight="700" fill="#185fa5">8.8s</text>
+      <text x="224" y="236" font-family="sans-serif" font-size="15" font-weight="700" fill="#185fa5">9.2s</text>
 
-      <rect x="200" y="268" width="6.3" height="44" rx="3" fill="#0f6e56"/>
+      <rect x="200" y="268" width="6.4" height="44" rx="3" fill="#0f6e56"/>
       <text x="192" y="296" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="600" fill="#4a4a45">OpenObserve</text>
       <text x="214" y="296" font-family="sans-serif" font-size="15" font-weight="700" fill="#0f6e56">3.7s</text>
 
@@ -439,7 +456,7 @@
 
       <rect x="360" y="202" width="280" height="56" rx="6" fill="#0f6e56"/>
       <text x="500" y="227" text-anchor="middle" font-family="sans-serif" font-size="16" font-weight="700" fill="#ffffff">比 Prometheus 快 69 倍</text>
-      <text x="500" y="247" text-anchor="middle" font-family="sans-serif" font-size="10.5" fill="#d4ebe2">比 VictoriaMetrics 快 2.4 倍，比 Mimir 快 19 倍</text>
+      <text x="500" y="247" text-anchor="middle" font-family="sans-serif" font-size="10.5" fill="#d4ebe2">比 VictoriaMetrics 快 2.5 倍，比 Mimir 快 7.3 倍</text>
     </svg>
     <figcaption>图 1 · 百万时间线的 histogram 查询，6 小时窗口。柱长按真实比例绘制。</figcaption>
   </figure>
@@ -491,10 +508,9 @@ limits:
   ingestion_burst_size: 20000000
   max_global_series_per_user: 150000000
   max_fetched_chunks_per_query: 20000000   # 默认 2e6
-  out_of_order_time_window: 2h
-  query_ingesters_within: 0</code></pre>
+  out_of_order_time_window: 2h</code></pre>
 
-  <p>Mimir 的后台计时器默认都以小时计：compaction 最多要等一小时，ingester 会把每个 block 的本地副本保留到上传后 13 小时，被合并掉的 block 保留 12 小时。本次测试中 Mimir 使用的是这些默认值，我们等它完全稳定后才开始测量。如果希望回填结束后约 30 分钟就稳定下来、只保留一份数据并从对象存储读取，可以把它们调短：</p>
+  <p>Mimir 的后台计时器默认都以小时计：compaction 最多要等一小时，ingester 会把每个 block 的本地副本保留到上传后 13 小时，被合并掉的 block 保留 12 小时。我们把它们调短了，于是 Mimir 在回填结束后 26 分钟就稳定下来，并从对象存储读取这份数据——就像其他系统读取自己的磁盘一样：</p>
 
 <pre><code>blocks_storage:
   tsdb:
@@ -508,8 +524,7 @@ compactor:
   first_level_compaction_wait_period: 1m   # 默认 25m
   compaction_interval: 5m                  # 默认 1h
   cleanup_interval: 5m                     # 默认 15m
-  deletion_delay: 10m                      # 默认 12h
-# 并让 limits.query_ingesters_within 保持默认的 13h</code></pre>
+  deletion_delay: 10m                      # 默认 12h</code></pre>
 
   <p>其中有两项 Mimir 会在启动时校验：查询期间的删除标记延迟必须大于 <code>sync_interval</code> 的 3 倍，并且小于 <code>ignore_deletion_mark_delay</code>。</p>
 
@@ -523,7 +538,7 @@ compactor:
 
   <h3>测量是怎么做的</h3>
 
-  <p><strong>查询从集群内部发起。</strong>在笔记本上通过 <code>kubectl port-forward</code> 跑基准测试，每个请求都会多出一秒甚至更多，而且这个开销不是常数——它随响应大小增长，会把快的系统淹没，对慢的系统却几乎没有影响。这样会毁掉系统之间的比例，而比例正是对比的全部意义。这里的所有数据都是从与四套系统同一可用区、且不在被测节点上的 Pod 测得的。</p>
+  <p><strong>查询从集群内部发起</strong>，发起查询的 Pod 与四套系统处于同一可用区，且不在被测节点上。</p>
 
   <p><strong>每套系统的数据都在节点本地 NVMe 上</strong>，所以存储不是变量，也没有哪条查询是在测网络磁盘的吞吐。</p>
 
@@ -538,7 +553,7 @@ compactor:
   <p>负载来自回填模式下的 <a href="https://github.com/openobserve/fake-webserver"><code>openobserve/fake-webserver:v5</code></a>：一个 Job 模拟 14 个 Web 服务器节点，用固定的随机种子生成 7 小时、严格每 15 秒一个点的样本。它<strong>把完全相同的 Prometheus remote-write 请求同时发给四套系统</strong>，所以每套系统收到的数据逐字节一致，相同参数也能复现出完全相同的样本。</p>
 
   <ul>
-    <li><strong>2,218,011,632 个样本</strong>，分布在 1,338,330 条时间线上，用时 1 小时 20 分钟写完，每套系统约 46.4 万样本/秒</li>
+    <li><strong>2,218,011,632 个样本</strong>，分布在 1,338,330 条时间线上，用时 1 小时 17 分钟写完，每套系统约 48.2 万样本/秒</li>
     <li>所有系统<strong>0 次重试、0 个样本被拒绝</strong>；写完后每套系统持有的样本数都与生成数完全一致</li>
   </ul>
 
@@ -559,29 +574,30 @@ compactor:
     </tbody>
   </table>
 
-  <p>记住这个 bucket 基数。一百万条时间线，正是结果开始拉开差距的地方。</p>
 
   <h2>查询：四条 PromQL 表达式，四个时间窗口</h2>
 
   <p>查询测试覆盖最常见的四类仪表盘负载——irate、无过滤 histogram、正则过滤 histogram、等值过滤 histogram——分别在 30 分钟、1 小时、3 小时和 6 小时窗口上运行。<strong>表中为中位数，单位 ms。</strong>没有任何查询失败，也没有任何系统重启。</p>
 
+  <p class="ab-note">缩写：Prom = Prometheus · VM = VictoriaMetrics · O2 = OpenObserve</p>
+
   <h3>1 · irate</h3>
 
 <pre><code>sum by (path) (irate(codelab_api_request_duration_seconds_count[1m]))</code></pre>
 
-  <table>
+  <table class="results">
     <thead>
-      <tr><th>窗口</th><th>Step</th><th>Prometheus</th><th>Mimir</th><th>VictoriaMetrics</th><th>OpenObserve</th></tr>
+      <tr><th>窗口</th><th>Step</th><th><span class="fl">Prometheus</span><span class="ab">Prom</span></th><th>Mimir</th><th><span class="fl">VictoriaMetrics</span><span class="ab">VM</span></th><th><span class="fl">OpenObserve</span><span class="ab">O2</span></th></tr>
     </thead>
     <tbody>
-      <tr><td>30m</td><td>15s</td><td>1,335</td><td>572</td><td>164</td><td><strong>26</strong></td></tr>
-      <tr><td>1h</td><td>15s</td><td>2,198</td><td>778</td><td>210</td><td><strong>40</strong></td></tr>
-      <tr><td>3h</td><td>15s</td><td>8,112</td><td>1,557</td><td>281</td><td><strong>84</strong></td></tr>
-      <tr><td>6h</td><td>30s</td><td>10,402</td><td>2,552</td><td>314</td><td><strong>112</strong></td></tr>
+      <tr><td>30m</td><td>15s</td><td>1,332</td><td>348</td><td>132</td><td><strong>23</strong></td></tr>
+      <tr><td>1h</td><td>15s</td><td>2,360</td><td>428</td><td>164</td><td><strong>36</strong></td></tr>
+      <tr><td>3h</td><td>15s</td><td>7,534</td><td>770</td><td>237</td><td><strong>80</strong></td></tr>
+      <tr><td>6h</td><td>30s</td><td>9,781</td><td>1,045</td><td>339</td><td><strong>112</strong></td></tr>
     </tbody>
   </table>
 
-  <p>只涉及 45,360 条时间线，这是整组里最便宜的查询，差距依然有两个数量级。在 6 小时窗口上，OpenObserve 用时 <strong>112ms——比 VictoriaMetrics（314ms）快 2.8 倍，比 Mimir 快 23 倍，比 Prometheus 快 93 倍</strong>。每个窗口它都在十分之一秒上下。</p>
+  <p>只涉及 45,360 条时间线，这是整组里最便宜的查询，差距依然有两个数量级。在 6 小时窗口上，OpenObserve 用时 <strong>112ms——比 VictoriaMetrics（339ms）快 3.0 倍，比 Mimir 快 9.3 倍，比 Prometheus 快 87 倍</strong>。每个窗口它都在十分之一秒上下。</p>
 
   <h3>2 · 无过滤 histogram：百万时间线压力测试</h3>
 
@@ -594,15 +610,15 @@ compactor:
 
   <p>这条查询没有任何标签过滤——要对全部 <strong>1,179,360 条时间线</strong>做 rate 加聚合。它是整个测试里最残酷的一条。</p>
 
-  <table>
+  <table class="results">
     <thead>
-      <tr><th>窗口</th><th>Step</th><th>Prometheus</th><th>Mimir</th><th>VictoriaMetrics</th><th>OpenObserve</th></tr>
+      <tr><th>窗口</th><th>Step</th><th><span class="fl">Prometheus</span><span class="ab">Prom</span></th><th>Mimir</th><th><span class="fl">VictoriaMetrics</span><span class="ab">VM</span></th><th><span class="fl">OpenObserve</span><span class="ab">O2</span></th></tr>
     </thead>
     <tbody>
-      <tr><td>30m</td><td>15s</td><td>33,514</td><td>14,850</td><td>4,152</td><td><strong>498</strong></td></tr>
-      <tr><td>1h</td><td>15s</td><td>61,054</td><td>19,790</td><td>6,127</td><td><strong>986</strong></td></tr>
-      <tr><td>3h</td><td>15s</td><td>196,290</td><td>43,092</td><td>7,898</td><td><strong>2,698</strong></td></tr>
-      <tr><td>6h</td><td>30s</td><td>256,860</td><td>71,273</td><td>8,804</td><td><strong>3,701</strong></td></tr>
+      <tr><td>30m</td><td>15s</td><td>33,653</td><td>6,738</td><td>4,164</td><td><strong>506</strong></td></tr>
+      <tr><td>1h</td><td>15s</td><td>60,159</td><td>9,450</td><td>4,704</td><td><strong>964</strong></td></tr>
+      <tr><td>3h</td><td>15s</td><td>193,082</td><td>20,222</td><td>7,222</td><td><strong>2,663</strong></td></tr>
+      <tr><td>6h</td><td>30s</td><td>252,336</td><td>26,704</td><td>9,246</td><td><strong>3,672</strong></td></tr>
     </tbody>
   </table>
 
@@ -625,15 +641,15 @@ into memory in query execution</code></pre>
       <text x="100" y="48" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="108" y="36" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="108" y="36" width="170.0" height="16" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="284" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">196.3s</text>
+      <text x="284" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">193.1s</text>
       <text x="100" y="72" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
       <rect x="108" y="60" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="60" width="37.3" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="284" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">43.1s</text>
+      <rect x="108" y="60" width="17.8" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
+      <text x="284" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">20.2s</text>
       <text x="100" y="96" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">VictoriaMetrics</text>
       <rect x="108" y="84" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="84" width="6.8" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="284" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">7.9s</text>
+      <rect x="108" y="84" width="6.4" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="284" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">7.2s</text>
       <text x="100" y="120" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">OpenObserve</text>
       <rect x="108" y="108" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="108" y="108" width="2.3" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
@@ -643,28 +659,28 @@ into memory in query execution</code></pre>
       <text x="452" y="48" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="460" y="36" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="460" y="36" width="170.0" height="16" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="636" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">256.9s</text>
+      <text x="636" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">252.3s</text>
       <text x="452" y="72" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
       <rect x="460" y="60" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="60" width="47.2" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="636" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">71.3s</text>
+      <rect x="460" y="60" width="18.0" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
+      <text x="636" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">26.7s</text>
       <text x="452" y="96" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">VictoriaMetrics</text>
       <rect x="460" y="84" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="84" width="5.8" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="636" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">8.8s</text>
+      <rect x="460" y="84" width="6.2" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="636" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">9.2s</text>
       <text x="452" y="120" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">OpenObserve</text>
       <rect x="460" y="108" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="108" width="2.4" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <rect x="460" y="108" width="2.5" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
       <text x="636" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">3.7s</text>
     </svg>
     <figcaption>图 2 · 百万时间线的无过滤 histogram。每个面板内柱长按真实比例绘制。</figcaption>
   </figure>
 
   <div class="pull">
-    扫描 118 万条时间线、6 小时数据，OpenObserve 在 <strong>3.7 秒</strong>内返回。VictoriaMetrics 要 8.8 秒，Mimir 要 71 秒，Prometheus 要四分多钟。
+    扫描 118 万条时间线、6 小时数据，OpenObserve 在 <strong>3.7 秒</strong>内返回。VictoriaMetrics 要 9.2 秒，Mimir 要 27 秒，Prometheus 要四分多钟。
   </div>
 
-  <p>扫描的数据越多，差距越大：30 分钟窗口上，OpenObserve <strong>比 VictoriaMetrics 快 8.3 倍</strong>（498ms 对 4,152ms），到 6 小时仍领先 2.4 倍。冷请求也是同样的结果：OpenObserve 的第一次 30 分钟查询用时 509ms，VictoriaMetrics 用了 13.7 秒。</p>
+  <p>扫描的数据越多，差距越大：30 分钟窗口上，OpenObserve <strong>比 VictoriaMetrics 快 8.2 倍</strong>（506ms 对 4,164ms），到 6 小时仍领先 2.5 倍。OpenObserve 的冷请求和热请求几乎没有差别：第一次 30 分钟查询用时 510ms。</p>
 
   <h3>3 · 过滤 histogram（正则匹配）</h3>
 
@@ -675,15 +691,15 @@ into memory in query execution</code></pre>
   )
 )</code></pre>
 
-  <table>
+  <table class="results">
     <thead>
-      <tr><th>窗口</th><th>Step</th><th>Prometheus</th><th>Mimir</th><th>VictoriaMetrics</th><th>OpenObserve</th></tr>
+      <tr><th>窗口</th><th>Step</th><th><span class="fl">Prometheus</span><span class="ab">Prom</span></th><th>Mimir</th><th><span class="fl">VictoriaMetrics</span><span class="ab">VM</span></th><th><span class="fl">OpenObserve</span><span class="ab">O2</span></th></tr>
     </thead>
     <tbody>
-      <tr><td>30m</td><td>15s</td><td>614</td><td>380</td><td>92</td><td><strong>24</strong></td></tr>
-      <tr><td>1h</td><td>15s</td><td>1,115</td><td>476</td><td>121</td><td><strong>38</strong></td></tr>
-      <tr><td>3h</td><td>15s</td><td>3,725</td><td>894</td><td>150</td><td><strong>86</strong></td></tr>
-      <tr><td>6h</td><td>30s</td><td>4,701</td><td>1,356</td><td>169</td><td><strong>132</strong></td></tr>
+      <tr><td>30m</td><td>15s</td><td>640</td><td>274</td><td>82</td><td><strong>22</strong></td></tr>
+      <tr><td>1h</td><td>15s</td><td>1,206</td><td>324</td><td>110</td><td><strong>36</strong></td></tr>
+      <tr><td>3h</td><td>15s</td><td>3,650</td><td>534</td><td>138</td><td><strong>86</strong></td></tr>
+      <tr><td>6h</td><td>30s</td><td>4,604</td><td>646</td><td>228</td><td><strong>134</strong></td></tr>
     </tbody>
   </table>
 
@@ -696,21 +712,21 @@ into memory in query execution</code></pre>
   )
 )</code></pre>
 
-  <table>
+  <table class="results">
     <thead>
-      <tr><th>窗口</th><th>Step</th><th>Prometheus</th><th>Mimir</th><th>VictoriaMetrics</th><th>OpenObserve</th></tr>
+      <tr><th>窗口</th><th>Step</th><th><span class="fl">Prometheus</span><span class="ab">Prom</span></th><th>Mimir</th><th><span class="fl">VictoriaMetrics</span><span class="ab">VM</span></th><th><span class="fl">OpenObserve</span><span class="ab">O2</span></th></tr>
     </thead>
     <tbody>
-      <tr><td>30m</td><td>15s</td><td>626</td><td>390</td><td>92</td><td><strong>18</strong></td></tr>
-      <tr><td>1h</td><td>15s</td><td>1,137</td><td>491</td><td>120</td><td><strong>33</strong></td></tr>
-      <tr><td>3h</td><td>15s</td><td>3,717</td><td>907</td><td>154</td><td><strong>78</strong></td></tr>
-      <tr><td>6h</td><td>30s</td><td>4,694</td><td>1,350</td><td>168</td><td><strong>116</strong></td></tr>
+      <tr><td>30m</td><td>15s</td><td>620</td><td>273</td><td>84</td><td><strong>19</strong></td></tr>
+      <tr><td>1h</td><td>15s</td><td>1,102</td><td>329</td><td>110</td><td><strong>34</strong></td></tr>
+      <tr><td>3h</td><td>15s</td><td>3,678</td><td>534</td><td>138</td><td><strong>78</strong></td></tr>
+      <tr><td>6h</td><td>30s</td><td>4,631</td><td>652</td><td>176</td><td><strong>114</strong></td></tr>
     </tbody>
   </table>
 
   <p>两种过滤方式的表现几乎一样：在每套系统上，<strong>正则匹配和等值匹配的开销基本相同</strong>——过滤类型不是变量，扫描量才是。</p>
 
-  <p>这是差距最小的地方。在 6 小时窗口上，OpenObserve 用时 116–132ms，VictoriaMetrics 为 168–169ms——<strong>快 1.3–1.5 倍</strong>；Mimir 需要 1.35 秒，Prometheus 需要 4.7 秒。窗口越短领先越大：30 分钟时，OpenObserve 比 VictoriaMetrics 快 4–5 倍。</p>
+  <p>这是差距最小的地方。在 6 小时窗口上，OpenObserve 用时 114–134ms，VictoriaMetrics 为 176–228ms——<strong>快 1.5–1.7 倍</strong>；Mimir 约需 0.65 秒，Prometheus 需要 4.6 秒。窗口越短领先越大：30 分钟时，OpenObserve 比 VictoriaMetrics 快约 4 倍。</p>
 
   <figure>
     <svg width="100%" viewBox="0 0 692 274" xmlns="http://www.w3.org/2000/svg" role="img">
@@ -719,92 +735,92 @@ into memory in query execution</code></pre>
       <text x="100" y="48" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="108" y="36" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="108" y="36" width="170.0" height="16" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="284" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">10.4s</text>
+      <text x="284" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">9.8s</text>
       <text x="100" y="72" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
       <rect x="108" y="60" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="60" width="41.7" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="284" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2.6s</text>
+      <rect x="108" y="60" width="18.2" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
+      <text x="284" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1.0s</text>
       <text x="100" y="96" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">VictoriaMetrics</text>
       <rect x="108" y="84" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="84" width="5.1" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="284" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">314 ms</text>
+      <rect x="108" y="84" width="5.9" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="284" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">339 ms</text>
       <text x="100" y="120" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">OpenObserve</text>
       <rect x="108" y="108" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="108" width="1.8" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <rect x="108" y="108" width="1.9" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
       <text x="284" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">112 ms</text>
       <text x="352" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">无过滤 histogram · 6h</text>
       <line x1="352" y1="27" x2="680" y2="27" stroke="#e0d9c8" stroke-width="1"/>
       <text x="452" y="48" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="460" y="36" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="460" y="36" width="170.0" height="16" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="636" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">256.9s</text>
+      <text x="636" y="48" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">252.3s</text>
       <text x="452" y="72" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
       <rect x="460" y="60" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="60" width="47.2" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="636" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">71.3s</text>
+      <rect x="460" y="60" width="18.0" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
+      <text x="636" y="72" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">26.7s</text>
       <text x="452" y="96" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">VictoriaMetrics</text>
       <rect x="460" y="84" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="84" width="5.8" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="636" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">8.8s</text>
+      <rect x="460" y="84" width="6.2" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="636" y="96" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">9.2s</text>
       <text x="452" y="120" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">OpenObserve</text>
       <rect x="460" y="108" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="108" width="2.4" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <rect x="460" y="108" width="2.5" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
       <text x="636" y="120" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">3.7s</text>
       <text x="0" y="151" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">过滤 histogram，正则 · 6h</text>
       <line x1="0" y1="159" x2="328" y2="159" stroke="#e0d9c8" stroke-width="1"/>
       <text x="100" y="180" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="108" y="168" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="108" y="168" width="170.0" height="16" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="284" y="180" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">4.7s</text>
+      <text x="284" y="180" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">4.6s</text>
       <text x="100" y="204" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
       <rect x="108" y="192" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="192" width="49.0" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="284" y="204" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1.4s</text>
+      <rect x="108" y="192" width="23.9" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
+      <text x="284" y="204" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">646 ms</text>
       <text x="100" y="228" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">VictoriaMetrics</text>
       <rect x="108" y="216" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="216" width="6.1" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="284" y="228" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">169 ms</text>
+      <rect x="108" y="216" width="8.4" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="284" y="228" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">228 ms</text>
       <text x="100" y="252" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">OpenObserve</text>
       <rect x="108" y="240" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="108" y="240" width="4.8" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="284" y="252" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">132 ms</text>
+      <rect x="108" y="240" width="4.9" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="284" y="252" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">134 ms</text>
       <text x="352" y="151" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">过滤 histogram，等值 · 6h</text>
       <line x1="352" y1="159" x2="680" y2="159" stroke="#e0d9c8" stroke-width="1"/>
       <text x="452" y="180" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
       <rect x="460" y="168" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="460" y="168" width="170.0" height="16" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="636" y="180" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">4.7s</text>
+      <text x="636" y="180" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">4.6s</text>
       <text x="452" y="204" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
       <rect x="460" y="192" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="192" width="48.9" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="636" y="204" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1.4s</text>
+      <rect x="460" y="192" width="23.9" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
+      <text x="636" y="204" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">652 ms</text>
       <text x="452" y="228" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">VictoriaMetrics</text>
       <rect x="460" y="216" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
-      <rect x="460" y="216" width="6.1" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="636" y="228" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">168 ms</text>
+      <rect x="460" y="216" width="6.5" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="636" y="228" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">176 ms</text>
       <text x="452" y="252" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">OpenObserve</text>
       <rect x="460" y="240" width="170" height="16" rx="2" fill="#ffffff" stroke="#e0d9c8"/>
       <rect x="460" y="240" width="4.2" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="636" y="252" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">116 ms</text>
+      <text x="636" y="252" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">114 ms</text>
     </svg>
     <figcaption>图 3 · 四类查询在 6 小时窗口上的表现。</figcaption>
   </figure>
 
-  <p>综合全部 16 个查询 × 窗口组合，几何平均延迟分别是：<strong>OpenObserve 123ms</strong>，VictoriaMetrics 400ms，Mimir 2,028ms，Prometheus 6,113ms——OpenObserve 的延迟是 <strong>VictoriaMetrics 的 0.31 倍、Mimir 的 6%、Prometheus 的 2%</strong>。</p>
+  <p>综合全部 16 个查询 × 窗口组合，几何平均延迟分别是：<strong>OpenObserve 120ms</strong>，VictoriaMetrics 374ms，Mimir 1,090ms，Prometheus 6,077ms——OpenObserve 的延迟是 <strong>VictoriaMetrics 的 0.32 倍、Mimir 的 11%、Prometheus 的 2%</strong>。</p>
 
   <h2>存储</h2>
 
   <p>各系统稳定后的磁盘占用，取自各系统自己的统计：</p>
 
-  <table>
+  <table class="storage">
     <thead>
       <tr><th>系统</th><th>磁盘占用</th><th>构成</th></tr>
     </thead>
     <tbody>
-      <tr><td>VictoriaMetrics</td><td><strong>1.06 GB</strong></td><td></td></tr>
+      <tr><td>VictoriaMetrics</td><td><strong>1.32 GB</strong></td><td></td></tr>
       <tr><td>OpenObserve</td><td>2.23 GB</td><td>数据 1.55 GB + 指标索引 0.67 GB</td></tr>
-      <tr><td>Prometheus</td><td>5.93 GB</td><td>block 1.74 GB；最近约 3 小时在 head chunks 1.01 GB + WAL 3.19 GB</td></tr>
-      <tr><td>Mimir</td><td>11.0 GB</td><td>对象存储 5.8 GB + ingester 本地副本 5.2 GB</td></tr>
+      <tr><td>Prometheus</td><td>5.43 GB</td><td>block 1.74 GB；最近约 3 小时在 head chunks 0.51 GB + WAL 3.19 GB</td></tr>
+      <tr><td>Mimir</td><td>5.51 GB</td><td>对象存储 1.94 GB；ingester 的 WAL 2.7 GB + 最新 block 0.64 GB</td></tr>
     </tbody>
   </table>
 
@@ -813,24 +829,24 @@ into memory in query execution</code></pre>
       <text x="0" y="19" font-family="sans-serif" font-size="12" font-weight="700" fill="#1a1a17">稳定后的磁盘占用（GB —— 越低越好）</text>
       <line x1="0" y1="27" x2="680" y2="27" stroke="#e0d9c8" stroke-width="1"/>
       <text x="112" y="50" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">VictoriaMetrics</text>
-      <rect x="120" y="38" width="45.3" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
-      <text x="173" y="50" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1.06 GB</text>
+      <rect x="120" y="38" width="112.6" height="16" rx="2" fill="#185fa5" opacity="0.92"/>
+      <text x="241" y="50" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">1.32 GB</text>
       <text x="112" y="76" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">OpenObserve</text>
-      <rect x="120" y="64" width="95.3" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
-      <text x="223" y="76" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2.23 GB</text>
+      <rect x="120" y="64" width="190.2" height="16" rx="2" fill="#0f6e56" opacity="0.92"/>
+      <text x="318" y="76" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">2.23 GB</text>
       <text x="112" y="102" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Prometheus</text>
-      <rect x="120" y="90" width="253.4" height="16" rx="2" fill="#c14920" opacity="0.92"/>
-      <text x="381" y="102" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">5.93 GB</text>
+      <rect x="120" y="90" width="463.2" height="16" rx="2" fill="#c14920" opacity="0.92"/>
+      <text x="591" y="102" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">5.43 GB</text>
       <text x="112" y="128" text-anchor="end" font-family="sans-serif" font-size="11" fill="#4a4a45">Mimir</text>
       <rect x="120" y="116" width="470.0" height="16" rx="2" fill="#ba7517" opacity="0.92"/>
-      <text x="598" y="128" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">11.0 GB</text>
+      <text x="598" y="128" font-family="sans-serif" font-size="11" font-weight="700" fill="#1a1a17">5.51 GB</text>
     </svg>
-    <figcaption>图 4 · 22.2 亿个样本的存储占用。Mimir 的数字包含它在 12–13 小时清理计时器到期前保留的副本。</figcaption>
+    <figcaption>图 4 · 22.2 亿个样本的存储占用，在回填结束 42 分钟后测量。</figcaption>
   </figure>
 
-  <p><strong>VictoriaMetrics 最紧凑</strong>，每个样本约半个字节。OpenObserve 用 2.23 GB 存下同样的数据，每个样本约一个字节，其中包括它的指标索引——0.67 GB，每个样本 0.30 字节——正是它让上面的查询这么快。数据本身是通用的列式 Parquet：同一份文件既能服务 PromQL，也能服务 SQL，并且可以直接放到对象存储上，生产环境里它通常就放在那里。</p>
+  <p><strong>VictoriaMetrics 最紧凑</strong>，每个样本约 0.6 字节。OpenObserve 用 2.23 GB 存下同样的数据，每个样本约一个字节，其中包括它的指标索引——0.67 GB，每个样本 0.30 字节——正是它让上面的查询这么快。数据本身是通用的列式 Parquet：同一份文件既能服务 PromQL，也能服务 SQL，并且可以直接放到对象存储上，生产环境里它通常就放在那里。</p>
 
-  <p>Prometheus 按设计把最近约 3 小时的数据放在内存映射的 head chunks 和 WAL 里，所以 5.93 GB 里大约三分之二是这一段。Mimir 的数字是查询运行时磁盘上的实际占用：它会把每个 block 在 ingester 本地的副本保留到上传后 13 小时，把被合并掉的 block 保留 12 小时，所以在这些计时器到期之前，数据会存多份。</p>
+  <p>Prometheus 按设计把最近约 3 小时的数据放在内存映射的 head chunks 和 WAL 里，所以 5.43 GB 里大约三分之二是这一段。Mimir 从对象存储里那个 1.94 GB 的合并后 block 读取数据；它的 ingester 会把 WAL 和最新的 block 留在本地磁盘上，直到 <code>close_idle_tsdb_timeout</code>（13 小时）关闭空闲的数据库。</p>
 
   <hr class="divider">
 
@@ -839,15 +855,12 @@ into memory in query execution</code></pre>
   <p>把同样的 22 亿个样本、134 万条时间线摆在资源相同的四套系统面前，结果可以浓缩成四句话：</p>
 
   <ul>
-    <li><strong>全面最快：</strong>16 个查询 × 窗口组合，OpenObserve 每一个都最快——几何平均延迟是 VictoriaMetrics 的 0.31 倍、Mimir 的 6%、Prometheus 的 2%</li>
-    <li><strong>高基数极限：</strong>118 万条时间线、6 小时的无过滤 histogram，OpenObserve 3.7s，VictoriaMetrics 8.8s，Mimir 71s，Prometheus 4 分 17 秒——而且每套系统都要调大限制才能跑完</li>
-    <li><strong>日常查询：</strong>6 小时 irate 用时 112ms，其他三套分别是 314ms、2.6s 和 10.4s；过滤 histogram 是差距最小的，6 小时领先 VictoriaMetrics 1.3–1.5 倍，30 分钟领先 4–5 倍</li>
-    <li><strong>存储：</strong>VictoriaMetrics 最紧凑，1.06 GB；OpenObserve 含指标索引共 2.23 GB，少于 Prometheus 的 5.9 GB 和 Mimir 的 11 GB</li>
+    <li><strong>全面最快：</strong>16 个查询 × 窗口组合，OpenObserve 每一个都最快——几何平均延迟是 VictoriaMetrics 的 0.32 倍、Mimir 的 11%、Prometheus 的 2%</li>
+    <li><strong>高基数极限：</strong>118 万条时间线、6 小时的无过滤 histogram，OpenObserve 3.7s，VictoriaMetrics 9.2s，Mimir 26.7s，Prometheus 4 分 12 秒——而且每套系统都要调大限制才能跑完</li>
+    <li><strong>日常查询：</strong>6 小时 irate 用时 112ms，其他三套分别是 339ms、1.0s 和 9.8s；过滤 histogram 是差距最小的，6 小时领先 VictoriaMetrics 1.5–1.7 倍，30 分钟领先约 4 倍</li>
+    <li><strong>存储：</strong>VictoriaMetrics 最紧凑，1.32 GB；OpenObserve 含指标索引共 2.23 GB，少于 Prometheus 的 5.4 GB 和 Mimir 的 5.5 GB</li>
   </ul>
 
-  <div class="pull">
-    在高基数指标场景下，真正的分水岭不是几百毫秒的延迟，而是<strong>当时间线超过一百万条时，要扫描所有时间线的那条查询需要多久</strong>。
-  </div>
 
   <div class="footnote">
     <strong>测试说明：</strong>
@@ -857,7 +870,8 @@ into memory in query execution</code></pre>
       <li>所有系统的结果缓存全部关闭</li>
       <li>四套系统的查询限制都已调大，让百万时间线的 histogram 能得到结果而不是被拒绝；超时统一为 600s。在默认限制下，Prometheus、Mimir 和 VictoriaMetrics 都会拒绝部分无过滤 histogram 窗口</li>
       <li>数据由回填模式的 fake-webserver v5 生成：模拟 14 个节点，7 小时、每 15 秒一个点，共 2,218,011,632 个样本、1,338,330 条时间线，以完全相同的 remote-write 请求写入四套系统；0 次重试，0 个样本被拒绝</li>
-      <li>Prometheus 和 Mimir 依靠 2 小时乱序窗口接收回填数据；所有系统都在第一条查询之前完成了各自的合并与清理</li>
+      <li>Prometheus 和 Mimir 依靠 2 小时乱序窗口接收回填数据；所有系统都在第一条查询之前完成了各自的合并与清理——回填结束后 VictoriaMetrics 用了 5 分钟，Prometheus 16 分钟，OpenObserve 22 分钟，Mimir 26 分钟</li>
+      <li>Mimir 的后台计时器按上文调短，因此这份数据只从对象存储读取</li>
       <li>查询窗口为 30m / 1h / 3h / 6h，截止于 2026-09-28 10:00 UTC；每个单元格跑 5 次（无过滤 3h 和 6h 各 1 次），连续两遍，取两遍合并后的中位数；每个单元格的第一次冷请求不计入</li>
       <li>过滤查询使用 <code>path="/api/bar"</code> 和 <code>path=~"/api/bar"</code></li>
       <li>倍数均为四舍五入的近似值，重点在数量级而非小数位</li>
