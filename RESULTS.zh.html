@@ -425,10 +425,10 @@
 
   <div class="lede">
     <strong>我们把同样的 22 亿个样本、134 万条时间线同时写入四套系统，然后在相同的固定时间窗口上，对每套系统执行完全相同的 PromQL。</strong><br><br>
-    每套系统都是同样的 12 CPU、24 GB 内存，同样的本地 NVMe 磁盘，同样的查询限制。16 个查询 × 窗口组合里，OpenObserve 每一个都是最快的。
+    每套系统都是同样的 12 CPU、24 GB 内存，同样的本地 NVMe 磁盘，同样的查询限制。4 个查询 × 4 个时间窗口，共 16 个组合，OpenObserve 每一个都是最快的。
   </div>
 
-  <p>参赛的是：<strong>Prometheus、Grafana Mimir、VictoriaMetrics 和 OpenObserve v1.1.0</strong>。每套系统以单节点方式运行，独占一台 EC2 <code>m7gd.4xlarge</code>，数据写在该节点的<strong>本地 NVMe</strong> 上，结果缓存全部关闭，查询限制与超时完全一致——这样一来，结果既不会由磁盘决定，也不会由某个保护性默认值决定。</p>
+  <p>参赛的是：<strong>Prometheus、Grafana Mimir、VictoriaMetrics 和 OpenObserve v1.1.1</strong>。每套系统以单节点方式运行，独占一台 EC2 <code>m7gd.4xlarge</code>，数据写在该节点的<strong>本地 NVMe</strong> 上，结果缓存全部关闭，查询限制与超时完全一致——这样一来，结果既不会由磁盘决定，也不会由某个保护性默认值决定。</p>
 
   <!-- Hero chart: 6h unfiltered histogram, the million-series query -->
   <figure>
@@ -465,7 +465,7 @@
 
   <ul>
     <li><strong>硬件：</strong>每套系统独占一台 EC2 <code>m7gd.4xlarge</code>（16 vCPU、64 GiB、本地 NVMe）；每个容器都限制为 <strong>12 CPU / 24 GB</strong>，requests 等于 limits——写入、合并和查询都在这个规格下完成</li>
-    <li><strong>版本：</strong>Prometheus <code>v3.6.0</code>；Mimir <code>3.2.2</code>；VictoriaMetrics <code>v1.154.0</code> 单节点版；OpenObserve <code>v1.1.0</code> standalone，Parquet 存储，开启指标索引。全部单节点部署</li>
+    <li><strong>版本：</strong>Prometheus <code>v3.6.0</code>；Mimir <code>3.2.2</code>；VictoriaMetrics <code>v1.154.0</code> 单节点版；OpenObserve <code>v1.1.1</code> standalone，Parquet 存储加指标索引。全部单节点部署</li>
     <li><strong>公平性设置：</strong>结果缓存全部关闭（VictoriaMetrics <code>-search.disableCache</code>，OpenObserve <code>ZO_RESULT_CACHE_ENABLED=false</code>；Prometheus 和 Mimir 没有配置结果缓存）；四套系统的查询限制调到同一水平；超时统一为 600s</li>
     <li><strong>数据：</strong>7 小时、严格每 15 秒一个点的样本，时间为 2026-09-28 03:00–10:00 UTC，一次性写入四套系统；所有查询都在写入完成之后才开始</li>
     <li><strong>查询范围：</strong>30m / 1h / 3h / 6h 四个窗口，全部截止于 2026-09-28 10:00 UTC</li>
@@ -481,9 +481,7 @@
   - name: ZO_METRICS_MAX_POINTS_PER_SERIES
     value: "10000000"
   - name: ZO_RESULT_CACHE_ENABLED
-    value: "false"
-  - name: ZO_METRICS_INDEX_ENABLED
-    value: "true"</code></pre>
+    value: "false"</code></pre>
 
   <p>Prometheus 的启动参数——开启 remote write receiver 以接收写入，后两项从默认值调大，让百万时间线的 histogram 能跑完而不是被拒绝——另外在 <code>prometheus.yml</code> 里设置了 2 小时的乱序窗口，因为写入端的并发发送会让相邻时间戳略有乱序：</p>
 
@@ -804,7 +802,7 @@ into memory in query execution</code></pre>
     <figcaption>图 3 · 四类查询在 6 小时窗口上的表现。</figcaption>
   </figure>
 
-  <p>综合全部 16 个查询 × 窗口组合，几何平均延迟分别是：<strong>OpenObserve 120ms</strong>，VictoriaMetrics 374ms，Mimir 1,090ms，Prometheus 6,077ms——OpenObserve 的延迟是 <strong>VictoriaMetrics 的 0.32 倍、Mimir 的 11%、Prometheus 的 2%</strong>。</p>
+  <p>综合全部 16 个组合（4 个查询 × 4 个时间窗口），几何平均延迟分别是：<strong>OpenObserve 120ms</strong>，VictoriaMetrics 374ms，Mimir 1,090ms，Prometheus 6,077ms——OpenObserve 的延迟是 <strong>VictoriaMetrics 的 0.32 倍、Mimir 的 11%、Prometheus 的 2%</strong>。</p>
 
   <h2>存储</h2>
 
@@ -853,7 +851,7 @@ into memory in query execution</code></pre>
   <p>把同样的 22 亿个样本、134 万条时间线摆在资源相同的四套系统面前，结果可以浓缩成四句话：</p>
 
   <ul>
-    <li><strong>全面最快：</strong>16 个查询 × 窗口组合，OpenObserve 每一个都最快——几何平均延迟是 VictoriaMetrics 的 0.32 倍、Mimir 的 11%、Prometheus 的 2%</li>
+    <li><strong>全面最快：</strong>4 个查询 × 4 个时间窗口共 16 个组合，OpenObserve 每一个都最快——几何平均延迟是 VictoriaMetrics 的 0.32 倍、Mimir 的 11%、Prometheus 的 2%</li>
     <li><strong>高基数极限：</strong>118 万条时间线、6 小时的无过滤 histogram，OpenObserve 3.7s，VictoriaMetrics 9.2s，Mimir 26.7s，Prometheus 4 分 12 秒——而且每套系统都要调大限制才能跑完</li>
     <li><strong>日常查询：</strong>6 小时 irate 用时 112ms，其他三套分别是 339ms、1.0s 和 9.8s；过滤 histogram 是差距最小的，6 小时领先 VictoriaMetrics 1.5–1.7 倍，30 分钟领先约 4 倍</li>
     <li><strong>存储：</strong>VictoriaMetrics 最紧凑，1.32 GB；OpenObserve 含指标索引共 2.23 GB，少于 Prometheus 的 5.4 GB 和 Mimir 的 5.5 GB</li>
@@ -863,7 +861,7 @@ into memory in query execution</code></pre>
   <div class="footnote">
     <strong>测试说明：</strong>
     <ul>
-      <li>版本：Prometheus <code>v3.6.0</code>，Mimir <code>3.2.2</code>，VictoriaMetrics <code>v1.154.0</code>，OpenObserve <code>v1.1.0</code>，开启指标索引（<code>ZO_METRICS_INDEX_ENABLED=true</code>）</li>
+      <li>版本：Prometheus <code>v3.6.0</code>，Mimir <code>3.2.2</code>，VictoriaMetrics <code>v1.154.0</code>，OpenObserve <code>v1.1.1</code>，该版本新增了指标索引</li>
       <li>每套系统独占一台 EC2 m7gd.4xlarge，本地 NVMe，每个容器 12 CPU / 24 GB，requests 等于 limits，全部单节点部署</li>
       <li>所有系统的结果缓存全部关闭</li>
       <li>四套系统的查询限制都已调大，让百万时间线的 histogram 能得到结果而不是被拒绝；超时统一为 600s。在默认限制下，Prometheus、Mimir 和 VictoriaMetrics 都会拒绝部分无过滤 histogram 窗口</li>

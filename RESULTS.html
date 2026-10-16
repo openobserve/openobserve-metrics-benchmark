@@ -422,10 +422,10 @@
 
   <div class="lede">
     <strong>We wrote the same 2.2 billion samples — 1.34 million series — into four systems at once, then ran the exact same PromQL against each over the same fixed time windows.</strong><br><br>
-    Every system had the same 12 CPUs and 24 GB of memory, the same local NVMe disk, and the same query limits. OpenObserve answered every one of the 16 query/window combinations fastest.
+    Every system had the same 12 CPUs and 24 GB of memory, the same local NVMe disk, and the same query limits. Across 4 queries × 4 time windows — 16 combinations — OpenObserve answered every one fastest.
   </div>
 
-  <p>The contenders: <strong>Prometheus, Grafana Mimir, VictoriaMetrics and OpenObserve v1.1.0</strong>. Each runs single-node on its own dedicated EC2 <code>m7gd.4xlarge</code>, writes to that node's <strong>local NVMe</strong>, has result caches disabled and identical query limits and timeouts — so that neither the disk nor a protective default decides the outcome.</p>
+  <p>The contenders: <strong>Prometheus, Grafana Mimir, VictoriaMetrics and OpenObserve v1.1.1</strong>. Each runs single-node on its own dedicated EC2 <code>m7gd.4xlarge</code>, writes to that node's <strong>local NVMe</strong>, has result caches disabled and identical query limits and timeouts — so that neither the disk nor a protective default decides the outcome.</p>
 
   <!-- Hero chart: 6h unfiltered histogram, the million-series query -->
   <figure>
@@ -462,7 +462,7 @@
 
   <ul>
     <li><strong>Hardware:</strong> one dedicated EC2 <code>m7gd.4xlarge</code> per system (16 vCPU, 64 GiB, local NVMe); every container limited to <strong>12 CPU / 24 GB</strong>, requests equal to limits — for ingestion, compaction and queries alike</li>
-    <li><strong>Versions:</strong> Prometheus <code>v3.6.0</code>; Mimir <code>3.2.2</code>; VictoriaMetrics <code>v1.154.0</code>, single node; OpenObserve <code>v1.1.0</code>, standalone, Parquet storage with its metrics index enabled. All single-node</li>
+    <li><strong>Versions:</strong> Prometheus <code>v3.6.0</code>; Mimir <code>3.2.2</code>; VictoriaMetrics <code>v1.154.0</code>, single node; OpenObserve <code>v1.1.1</code>, standalone, Parquet storage with metrics index. All single-node</li>
     <li><strong>Fairness settings:</strong> result caches off (VictoriaMetrics <code>-search.disableCache</code>, OpenObserve <code>ZO_RESULT_CACHE_ENABLED=false</code>; Prometheus and Mimir have none configured); query limits raised to the same level on all four; a 600s timeout everywhere</li>
     <li><strong>Data:</strong> 7 hours of samples at exactly 15-second intervals, 2026-09-28 03:00–10:00 UTC, written once to all four; ingestion finished before any query ran</li>
     <li><strong>Query range:</strong> four windows of 30m / 1h / 3h / 6h, all ending 2026-09-28 10:00 UTC</li>
@@ -478,9 +478,7 @@
   - name: ZO_METRICS_MAX_POINTS_PER_SERIES
     value: "10000000"
   - name: ZO_RESULT_CACHE_ENABLED
-    value: "false"
-  - name: ZO_METRICS_INDEX_ENABLED
-    value: "true"</code></pre>
+    value: "false"</code></pre>
 
   <p>Prometheus launch arguments — the remote write receiver so the load can be pushed in, and the last two raised from their defaults so the million-series histogram runs instead of being refused — plus a 2-hour out-of-order window in <code>prometheus.yml</code>, because the load's parallel senders deliver neighbouring timestamps slightly out of order:</p>
 
@@ -801,7 +799,7 @@ into memory in query execution</code></pre>
     <figcaption>Figure 3 · All four query types over the 6-hour window.</figcaption>
   </figure>
 
-  <p>Across all 16 query/window combinations, the geometric mean latency is <strong>120ms for OpenObserve</strong>, 374ms for VictoriaMetrics, 1,090ms for Mimir and 6,077ms for Prometheus — OpenObserve at <strong>0.32× VictoriaMetrics' latency, 11% of Mimir's and 2% of Prometheus'</strong>.</p>
+  <p>Across all 16 combinations (4 queries × 4 time windows), the geometric mean latency is <strong>120ms for OpenObserve</strong>, 374ms for VictoriaMetrics, 1,090ms for Mimir and 6,077ms for Prometheus — OpenObserve at <strong>0.32× VictoriaMetrics' latency, 11% of Mimir's and 2% of Prometheus'</strong>.</p>
 
   <h2>Storage</h2>
 
@@ -850,7 +848,7 @@ into memory in query execution</code></pre>
   <p>Put the same 2.2 billion samples and 1.34 million series in front of four systems with the same resources, and the results condense to four sentences:</p>
 
   <ul>
-    <li><strong>Fastest everywhere:</strong> OpenObserve answers all 16 query/window combinations fastest — geomean 0.32× VictoriaMetrics' latency, 11% of Mimir's and 2% of Prometheus'</li>
+    <li><strong>Fastest everywhere:</strong> OpenObserve answers all 16 combinations (4 queries × 4 windows) fastest — geomean 0.32× VictoriaMetrics' latency, 11% of Mimir's and 2% of Prometheus'</li>
     <li><strong>The high-cardinality limit:</strong> the unfiltered histogram over 1.18M series and 6 hours takes OpenObserve 3.7s, VictoriaMetrics 9.2s, Mimir 26.7s and Prometheus 4m 12s — and needs raised limits on every system to run at all</li>
     <li><strong>Everyday queries:</strong> irate at 6h answers in 112ms against 339ms, 1.0s and 9.8s; filtered histograms are the closest race, 1.5–1.7× ahead of VictoriaMetrics at 6h and about 4× at 30m</li>
     <li><strong>Storage:</strong> VictoriaMetrics is the most compact at 1.32 GB; OpenObserve uses 2.23 GB including its metrics index, ahead of Prometheus at 5.4 GB and Mimir at 5.5 GB</li>
@@ -860,7 +858,7 @@ into memory in query execution</code></pre>
   <div class="footnote">
     <strong>Test notes:</strong>
     <ul>
-      <li>Versions: Prometheus <code>v3.6.0</code>, Mimir <code>3.2.2</code>, VictoriaMetrics <code>v1.154.0</code>, OpenObserve <code>v1.1.0</code> with its metrics index enabled (<code>ZO_METRICS_INDEX_ENABLED=true</code>)</li>
+      <li>Versions: Prometheus <code>v3.6.0</code>, Mimir <code>3.2.2</code>, VictoriaMetrics <code>v1.154.0</code>, OpenObserve <code>v1.1.1</code>, which adds a new metrics index</li>
       <li>One dedicated EC2 m7gd.4xlarge per system, local NVMe, every container 12 CPU / 24 GB with requests equal to limits, all single-node</li>
       <li>Result caches disabled on every system</li>
       <li>Query limits raised on all four so the million-series histogram is answered rather than refused; a 600s timeout everywhere. At stock limits Prometheus, Mimir and VictoriaMetrics refuse some of the unfiltered histogram windows</li>

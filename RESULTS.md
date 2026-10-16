@@ -1,6 +1,6 @@
 # Results
 
-2026-10-15 · OpenObserve v1.1.0 against Prometheus, Grafana Mimir and
+2026-10-15 · OpenObserve v1.1.1 against Prometheus, Grafana Mimir and
 VictoriaMetrics.
 
 **All latencies are milliseconds of client-observed wall time, median of the
@@ -23,8 +23,8 @@ Mimir 26.7 s and Prometheus 4 m 12 s.
 | Prometheus | `quay.io/prometheus/prometheus:v3.6.0` |
 | Mimir | `grafana/mimir:3.2.2` |
 | VictoriaMetrics | `victoriametrics/victoria-metrics:v1.154.0`, single node (chart `victoria-metrics-single` 0.49.0) |
-| OpenObserve | `public.ecr.aws/zinclabs/openobserve:v1.1.0-debug` — the release `release-prod` + `mimalloc` binary on a Debian base with a shell |
-| OpenObserve settings | defaults, plus `ZO_METRICS_INDEX_ENABLED=true`, result cache off and raised metrics query limits |
+| OpenObserve | `public.ecr.aws/zinclabs/openobserve:v1.1.1-debug` — the release `release-prod` + `mimalloc` binary on a Debian base with a shell |
+| OpenObserve settings | defaults, plus result cache off and raised metrics query limits |
 | Mimir settings | background timers shortened so it settles ~30 min after a backfill and answers old data from object storage only — see `deploy/mimir/deploy.yaml` |
 | Load | `openobserve/fake-webserver:v5` backfill: 14 simulated nodes, 7 h at exactly 15 s, seed 1, one Job writing the same remote-write requests to every system |
 | Data | 2026-09-28 03:00–10:00 UTC; queries end at 10:00 UTC (`END_TIME=1790589600`) |

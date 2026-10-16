@@ -16,7 +16,7 @@ PromQL runs against all of them.
   backfill Job        remote write    ├────────────────────────────────────┤
   7h of 15 s points  ─────────────►   │  VictoriaMetrics  v1.154.0 single  │  each: 12 CPU / 24 GB,
   1,338,330 series    same 10k-sample ├────────────────────────────────────┤  own m7gd.4xlarge node,
-  2.22B samples       requests to all │  OpenObserve      v1.1.0, parquet  │  local NVMe
+  2.22B samples       requests to all │  OpenObserve      v1.1.1, parquet  │  local NVMe
   ~80 min, then exits                 └────────────────────────────────────┘
 ```
 
@@ -29,7 +29,7 @@ the dataset is reproducible byte for byte: same seed and flags, same samples.
 Measured numbers are in [RESULTS.md](RESULTS.md).
 
 **The latest round (2026-10-15)** put Prometheus, Mimir, VictoriaMetrics and
-OpenObserve `v1.1.0` on one backfilled dataset — 1,338,330 series, 2.22B
+OpenObserve `v1.1.1` on one backfilled dataset — 1,338,330 series, 2.22B
 samples — at 12 CPU / 24 GB each. The query that scans everything,
 `histogram_quantile` over all 1,179,360 bucket series with a 6-hour window:
 

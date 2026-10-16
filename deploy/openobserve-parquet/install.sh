@@ -19,5 +19,5 @@ perf-o2-parquet is up.
   query: http://o2-openobserve-standalone.perf-o2-parquet.svc.cluster.local:5080/api/default/prometheus/api/v1/query_range
 
 Confirm the settings actually took effect:
-  kubectl -n perf-o2-parquet exec sts/o2-openobserve-standalone -- printenv ZO_COMPACT_ENABLED ZO_METRICS_INDEX_ENABLED
+  kubectl -n perf-o2-parquet exec sts/o2-openobserve-standalone -- printenv ZO_COMPACT_ENABLED
 EOF
