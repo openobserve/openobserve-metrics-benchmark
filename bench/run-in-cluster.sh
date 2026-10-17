@@ -65,7 +65,7 @@ SUT=(
 # -----------------------------------------------------------------------------
 : "${BENCH_NS:=perf-bench}"
 : "${BENCH_POD:=bench}"
-: "${BENCH_IMAGE:=alpine:3.20.10}"
+: "${BENCH_IMAGE:=alpine:3.20}"
 : "${BENCH_ARCH:=arm64}"    # the perf nodes are Graviton; empty string = any
 : "${BENCH_ZONE:=}"         # empty = auto-detect from the systems under test
 : "${REMOTE_DIR:=/opt/mb}"
@@ -226,7 +226,7 @@ kubectl -n "${BENCH_NS}" wait --for=condition=Ready "pod/${BENCH_POD}" --timeout
 # response bodies. Idempotent, so a reused pod skips the download.
 if ! kexec sh -c 'command -v bash >/dev/null && command -v curl >/dev/null && command -v python3 >/dev/null' 2>/dev/null; then
   echo "==> installing bash curl python3"
-  kexec sh -c 'apk add --no-cache bash=5.2.26-r0 curl=8.14.1-r2 python3=3.12.13-r0 >/dev/null'
+  kexec sh -c 'apk add --no-cache bash curl python3 >/dev/null'
 fi
 
 echo "==> runner: $(kubectl -n "${BENCH_NS}" get pod "${BENCH_POD}" \

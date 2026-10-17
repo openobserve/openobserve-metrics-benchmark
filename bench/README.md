@@ -132,8 +132,7 @@ through the Kubernetes API server, which adds about a second, and more for
 larger responses — it swamps a fast system and barely dents a slow one, so the
 ratios between systems are lost.
 
-`run-in-cluster.sh` starts a runner pod (`alpine:3.20.10` with bash 5.2.26,
-curl 8.14.1 and python3 3.12.13, all pinned) on a node that is *not* under test (no
+`run-in-cluster.sh` starts a runner pod on a node that is *not* under test (no
 `perf` toleration, so it cannot steal CPU from what it measures), pinned to the
 systems' AZ, runs the driver against ClusterIP DNS, and copies
 `results/<stamp>/` back with a `measured_from` line in `run-metadata.txt`.

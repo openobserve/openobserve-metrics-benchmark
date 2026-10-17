@@ -31,7 +31,7 @@ Mimir 26.7 s and Prometheus 4 m 12 s.
 | Windows / step | 30m, 1h, 3h at 15 s; 6h at 30 s |
 | Filter | `path="/api/bar"` / `path=~"/api/bar"` |
 | Runs | 5 per cell. **Two back-to-back passes pooled** (`20261015T160054Z`, `20261015T163651Z`) |
-| Measured from | a pod in the cluster, same AZ, on a node not under test (`alpine:3.20.10`, curl 8.14.1) |
+| Measured from | a pod in the cluster, same AZ, on a node not under test |
 
 ## Ingest
 
