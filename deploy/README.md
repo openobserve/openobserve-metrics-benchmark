@@ -64,7 +64,8 @@ minutes, so Mimir settles about 30 minutes after the load and answers the
 backfilled data from object storage. The image is pinned to
 `grafana/mimir:3.2.2`.
 
-**`victoriametrics/`** — `victoria-metrics-single` chart, release `vms`.
+**`victoriametrics/`** — `victoria-metrics-single` chart 0.49.0, release `vms`,
+image pinned to `victoriametrics/victoria-metrics:v1.154.0`.
 `-search.disableCache` is on, so it never answers from a result cache.
 `retentionPeriod: 1` (month): **samples older than that are silently dropped**
 (counted in `vm_too_small_timestamp_rows_ignored_total`, not refused), so a
@@ -72,9 +73,10 @@ backfill's start must be within the last month. The default dataset,
 2026-09-28, stops fitting around 2026-10-28 — pass a newer `BACKFILL_START`, or
 raise the retention, and check `vm_rows_added_to_storage_total` afterwards.
 
-**`openobserve-parquet/`** — `openobserve-standalone` chart, release `o2`,
-Parquet (the default file format). A Vortex deployment was dropped: with the metrics
-index it queries no faster and takes more than twice the disk. Confirm what
+**`openobserve-parquet/`** — `openobserve-standalone` chart 1.0.1, release `o2`,
+image `public.ecr.aws/zinclabs/openobserve:v1.1.1-debug`, Parquet (the default
+file format). A Vortex deployment was dropped: with the metrics index it
+queries no faster and takes more than twice the disk. Confirm what
 reached the process before every round — the chart's ConfigMap carries its own
 defaults, and it is the explicit `env` that wins:
 

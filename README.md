@@ -12,7 +12,7 @@ PromQL runs against all of them.
                                       ┌────────────────────────────────────┐
                                       │  Prometheus       v3.6.0           │
                                       ├────────────────────────────────────┤
-  fake-webserver v5                   │  Mimir            single binary    │
+  fake-webserver v5                   │  Mimir            3.2.2 single     │
   backfill Job        remote write    ├────────────────────────────────────┤
   7h of 15 s points  ─────────────►   │  VictoriaMetrics  v1.154.0 single  │  each: 12 CPU / 24 GB,
   1,338,330 series    same 10k-sample ├────────────────────────────────────┤  own m7gd.4xlarge node,
@@ -193,9 +193,9 @@ deploy/
   set-dataset.sh       Point all four at a named dataset on the instance store
   local-nvme/          DaemonSet that formats and mounts each node's NVMe
   prometheus/          Prometheus v3.6.0, remote-write receiver, scrapes nothing
-  mimir/               Mimir single binary, filesystem blocks storage
-  victoriametrics/     VictoriaMetrics single node (Helm)
-  openobserve-parquet/ OpenObserve standalone, Parquet (Helm)
+  mimir/               Mimir 3.2.2 single binary, filesystem blocks storage
+  victoriametrics/     VictoriaMetrics v1.154.0 single node (Helm)
+  openobserve-parquet/ OpenObserve v1.1.1 standalone, Parquet (Helm)
   fake-webserver/      The load: a v5 backfill Job writing to all four
 bench/
   config.sh            Endpoints, windows, step, runs — every knob

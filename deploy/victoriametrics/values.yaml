@@ -1,5 +1,8 @@
 # VictoriaMetrics single node. Only non-default chart values.
 server:
+  image:
+    repository: victoriametrics/victoria-metrics
+    tag: v1.154.0
   extraArgs:
     httpListenAddr: ":8428"
     storageDataPath: /nvme
